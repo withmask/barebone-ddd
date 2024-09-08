@@ -5,7 +5,7 @@
   "main": "build/index.js",
   "scripts": {
     "build": "tsc && tsc-alias",
-    "build:utils": "tsc --project ./utils.tsconfig.json",
+    "build:utils": "tsc --project ./include/utils.tsconfig.json",
     "lint": "eslint src",
     "lint:fix": "eslint src --fix",
     "validate": "node --loader ./include/loader.js dist/structure-validator/index.js",
