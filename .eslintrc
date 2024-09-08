@@ -57,7 +57,7 @@
         "utils/**/*.d.ts"
       ],
       "parserOptions": {
-        "project": "./utils.tsconfig.json"
+        "project": "./include/utils.tsconfig.json"
       },
       "extends": [
         "./include/ts.eslintrc"
