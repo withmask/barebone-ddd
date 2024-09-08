@@ -1,0 +1,78 @@
+{
+  "root": true,
+  "parser": "@typescript-eslint/parser",
+  "plugins": [
+    "@typescript-eslint",
+    "prettier"
+  ],
+  "extends": [
+    "eslint:recommended",
+    "prettier"
+  ],
+  "env": {
+    "node": true,
+    "es2020": true
+  },
+  "parserOptions": {
+    "ecmaVersion": 2023
+  },
+  "rules": {
+    "camelcase": "error",
+    "eqeqeq": "error",
+    "max-classes-per-file": [
+      "error",
+      1
+    ],
+    "semi": "error",
+    "comma-dangle": [
+      "error",
+      "never"
+    ],
+    "no-inline-comments": "error",
+    "quotes": [
+      "error",
+      "single",
+      {
+        "avoidEscape": true
+      }
+    ],
+    "prettier/prettier": "error"
+  },
+  "overrides": [
+    {
+      "files": [
+        "src/**/*.ts",
+        "src/**/*.d.ts"
+      ],
+      "parserOptions": {
+        "project": "./tsconfig.json"
+      },
+      "extends": [
+        "./include/ts.eslintrc"
+      ]
+    },
+    {
+      "files": [
+        "utils/**/*.ts",
+        "utils/**/*.d.ts"
+      ],
+      "parserOptions": {
+        "project": "./utils.tsconfig.json"
+      },
+      "extends": [
+        "./include/ts.eslintrc"
+      ]
+    },
+    {
+      "files": [
+        "typings/*.d.ts"
+      ],
+      "parserOptions": {
+        "project": "./tsconfig.json"
+      },
+      "rules": {
+        "no-unused-vars": "off"
+      }
+    }
+  ]
+}

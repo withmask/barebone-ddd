@@ -1,0 +1,478 @@
+[
+  {
+    "command": "registry",
+    "cmd": "REG",
+    "reg": "persistanceDrivers"
+  },
+  {
+    "command": "registry",
+    "cmd": "ADD-M",
+    "reg": "persistanceDrivers",
+    "var": ["mongo"]
+  },
+  {
+    "command": "readdir",
+    "directory": "src/app",
+    "variable": "domain",
+    "filter": "dir-only",
+    "every": [
+      {
+        "command": "structure",
+        "root": "src/app/{domain}",
+        "dirs": ["application", "repositories", "entities", "factories"],
+        "files": [],
+        "optional": {
+          "dirs": ["events", "rpc", "value-objects", "aggregates"],
+          "files": []
+        },
+        "skip": ["index.ts"]
+      },
+      {
+        "command": "structure",
+        "root": "src/app/{domain}/application",
+        "dirs": ["controllers", "typings"],
+        "files": [],
+        "optional": {
+          "dirs": ["subscribers", "exceptions"],
+          "files": []
+        },
+        "skip": ["index.ts"]
+      },
+
+      {
+        "command": "structure",
+        "root": "src/app/{domain}/application/typings",
+        "dirs": ["controllers"],
+        "files": [],
+        "optional": {
+          "dirs": [],
+          "files": []
+        },
+        "skip": ["index.ts"]
+      },
+
+      {
+        "command": "section",
+        "name": "Controllers {domain}",
+        "commands": [
+          {
+            "command": "registry",
+            "cmd": "REG",
+            "reg": "controllers/{domain}"
+          },
+          {
+            "command": "if",
+            "condition": {
+              "name": "not-empty",
+              "directory": "src/app/{domain}/application/controllers",
+              "ignore": ["index.ts"]
+            },
+            "then": [
+              {
+                "command": "readdir",
+                "directory": "src/app/{domain}/application/controllers",
+                "variable": "controller",
+                "extensionless": "controllerName",
+                "filter": "file-only",
+                "skip": ["index.ts"],
+                "every": [
+                  {
+                    "command": "is-ext",
+                    "file": "{controller}",
+                    "ext": "ts"
+                  },
+                  {
+                    "command": "is-file",
+                    "path": "src/app/{domain}/application/typings/controllers/{controllerName}.d.ts"
+                  },
+                  {
+                    "command": "registry",
+                    "cmd": "ADD",
+                    "reg": "controllers/{domain}",
+                    "var": "{controllerName}"
+                  }
+                ]
+              }
+            ],
+            "else": [
+              {
+                "command": "warn",
+                "message": "Domain {domain} does not have any use cases."
+              }
+            ]
+          },
+          {
+            "command": "if",
+            "condition": {
+              "name": "not-empty",
+              "directory": "src/app/{domain}/application/typings/controllers",
+              "ignore": ["index.ts"]
+            },
+            "then": [
+              {
+                "command": "readdir",
+                "directory": "src/app/{domain}/application/typings/controllers",
+                "variable": "controller",
+                "extensionless": "controllerName",
+                "filter": "file-only",
+                "skip": ["index.ts"],
+                "every": [
+                  {
+                    "command": "is-ext",
+                    "file": "{controller}",
+                    "ext": "d.ts"
+                  },
+                  {
+                    "command": "registry",
+                    "cmd": "NOT-IN",
+                    "reg": "controllers/{domain}",
+                    "var": "{controllerName}",
+                    "then": [
+                      {
+                        "command": "error",
+                        "message": "Domain {domain} has definition for an undefined controller: {controllerName}"
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "command": "registry",
+            "cmd": "UNREG",
+            "reg": "controllers/{domain}"
+          }
+        ]
+      },
+      {
+        "command": "section",
+        "name": "Subscribers {domain}",
+        "commands": [
+          {
+            "command": "if",
+            "condition": {
+              "name": "exists",
+              "path": "src/app/{domain}/application/subscribers"
+            },
+            "then": [
+              {
+                "command": "if",
+                "condition": {
+                  "name": "not-empty",
+                  "directory": "src/app/{domain}/application/subscribers",
+                  "ignore": ["index.ts"]
+                },
+                "then": [
+                  {
+                    "command": "readdir",
+                    "directory": "src/app/{domain}/application/subscribers",
+                    "variable": "subscriber",
+                    "filter": "file-only",
+                    "skip": ["index.ts"],
+                    "every": [
+                      {
+                        "command": "is-ext",
+                        "file": "{subscriber}",
+                        "ext": "ts"
+                      }
+                    ]
+                  }
+                ],
+                "else": [
+                  {
+                    "command": "error",
+                    "message": "Domain {domain} has a subscribers directory but has no listener files."
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "command": "if",
+            "condition": {
+              "name": "exists",
+              "path": "src/app/{domain}/application/exceptions"
+            },
+            "then": [
+              {
+                "command": "readdir",
+                "directory": "src/app/{domain}/application/exceptions",
+                "filter": "file-only",
+                "skip": ["index.ts"],
+                "variable": "exception",
+                "every": [
+                  {
+                    "command": "is-ext",
+                    "ext": "ts",
+                    "file": "{exception}"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "command": "section",
+        "name": "Other structures (entities,rpc,repos) {domain}",
+        "commands": [
+          {
+            "command": "readdir",
+            "directory": "src/app/{domain}/factories",
+            "filter": "file-only",
+            "skip": ["index.ts"],
+            "variable": "factory",
+            "every": [
+              {
+                "command": "is-ext",
+                "ext": "ts",
+                "file": "{factory}"
+              }
+            ]
+          },
+          {
+            "command": "readdir",
+            "directory": "src/app/{domain}/entities",
+            "filter": "file-only",
+            "skip": ["index.ts"],
+            "variable": "entity",
+            "every": [
+              {
+                "command": "is-ext",
+                "ext": "ts",
+                "file": "{entity}"
+              },
+              {
+                "command": "is-file",
+                "path": "src/app/{domain}/factories/{entity}"
+              }
+            ]
+          },
+          {
+            "command": "if",
+            "condition": {
+              "name": "exists",
+              "path": "src/app/{domain}/events"
+            },
+            "then": [
+              {
+                "command": "readdir",
+                "directory": "src/app/{domain}/events",
+                "filter": "file-only",
+                "skip": ["index.ts"],
+                "variable": "event",
+                "every": [
+                  {
+                    "command": "is-ext",
+                    "ext": "d.ts",
+                    "file": "{event}"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "command": "if",
+            "condition": {
+              "name": "exists",
+              "path": "src/app/{domain}/repositories"
+            },
+            "then": [
+              {
+                "command": "readdir",
+                "directory": "src/app/{domain}/repositories",
+                "filter": "file-only",
+                "skip": ["index.ts"],
+                "variable": "repository",
+                "extensionless": "repoName",
+                "every": [
+                  {
+                    "command": "is-ext",
+                    "ext": "d.ts",
+                    "file": "{repository}"
+                  },
+                  {
+                    "command": "registry",
+                    "cmd": "ALL",
+                    "reg": "persistanceDrivers",
+                    "var": "driver",
+                    "every": [
+                      {
+                        "command": "is-file",
+                        "path": "src/drivers/{driver}/repositories/{domain}/{repoName}.ts"
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "command": "if",
+            "condition": {
+              "name": "exists",
+              "path": "src/app/{domain}/rpc"
+            },
+            "then": [
+              {
+                "command": "readdir",
+                "directory": "src/app/{domain}/rpc",
+                "filter": "file-only",
+                "skip": ["index.ts"],
+                "variable": "rpc",
+                "every": [
+                  {
+                    "command": "is-ext",
+                    "ext": "d.ts",
+                    "file": "{rpc}"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "command": "if",
+            "condition": {
+              "name": "exists",
+              "path": "src/app/{domain}/value-objects"
+            },
+            "then": [
+              {
+                "command": "structure",
+                "dirs": ["modifiers", "types"],
+                "files": [],
+                "optional": {
+                  "dirs": [],
+                  "files": []
+                },
+                "skip": ["index.ts"],
+                "root": "src/app/{domain}/value-objects"
+              },
+              {
+                "command": "registry",
+                "cmd": "REG",
+                "reg": "value-objects/{domain}"
+              },
+              {
+                "command": "readdir",
+                "directory": "src/app/{domain}/value-objects/types",
+                "filter": "file-only",
+                "skip": ["index.ts"],
+                "variable": "vo",
+                "extensionless": "voName",
+                "every": [
+                  {
+                    "command": "is-ext",
+                    "ext": "ts",
+                    "file": "{vo}"
+                  },
+                  {
+                    "command": "registry",
+                    "cmd": "ADD",
+                    "reg": "value-objects/{domain}",
+                    "var": "{voName}"
+                  }
+                ]
+              },
+              {
+                "command": "registry",
+                "cmd": "",
+                "reg": "value-objects/{domain}"
+              },
+              {
+                "command": "registry",
+                "cmd": "UNREG",
+                "reg": "value-objects/{domain}"
+              },
+              {
+                "command": "find-unique",
+                "regs": ["A", "B"],
+                "variable": "element",
+                "every": {
+                  "A": []
+                }
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "command": "section",
+        "name": "Aggregates {domain}",
+        "commands": [
+          {
+            "command": "readdir",
+            "directory": "src/app/{domain}/aggregates",
+            "every": [
+              {
+                "command": "structure",
+                "root": "src/app/{domain}/aggregates/{aggregateName}",
+                "dirs": ["core", "typings"],
+                "optional": {
+                  "dirs": ["exceptions"],
+                  "files": []
+                },
+                "files": ["root.ts"],
+                "skip": ["index.ts"]
+              },
+              {
+                "command": "structure",
+                "root": "src/app/{domain}/aggregates/{aggregateName}/core",
+                "dirs": [],
+                "files": [
+                  "aggregate.ts",
+                  "factory.ts",
+                  "mapper.ts",
+                  "methods.ts"
+                ],
+                "optional": {
+                  "dirs": [],
+                  "files": []
+                },
+                "skip": ["index.ts"]
+              },
+              {
+                "command": "structure",
+                "root": "src/app/{domain}/aggregates/{aggregateName}/typings",
+                "dirs": [],
+                "files": ["factory.d.ts", "mapper.d.ts", "root.d.ts"],
+                "optional": {
+                  "dirs": [],
+                  "files": []
+                },
+                "skip": ["index.ts"]
+              },
+              {
+                "command": "if",
+                "condition": {
+                  "name": "exists",
+                  "path": "src/app/{domain}/aggregates/{aggregateName}/exceptions"
+                },
+                "then": [
+                  {
+                    "command": "readdir",
+                    "directory": "src/app/{domain}/aggregates/{aggregateName}/exceptions",
+                    "filter": "file-only",
+                    "skip": ["index.ts"],
+                    "variable": "exception",
+                    "every": [
+                      {
+                        "command": "is-ext",
+                        "ext": "ts",
+                        "file": "{exception}"
+                      }
+                    ]
+                  }
+                ]
+              }
+            ],
+            "filter": "dir-only",
+            "skip": ["index.ts"],
+            "variable": "aggregateName"
+          }
+        ]
+      }
+    ]
+  }
+]

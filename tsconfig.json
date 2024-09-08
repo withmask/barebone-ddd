@@ -1,0 +1,33 @@
+{
+  "compilerOptions": {
+    "experimentalDecorators": true,
+    "esModuleInterop": true,
+    "resolveJsonModule": true,
+    "strict": true,
+    "lib": [
+      "ESNext"
+    ],
+    "skipLibCheck": false,
+    "noUnusedParameters": true,
+    "noUnusedLocals": true,
+    "removeComments": true,
+    "alwaysStrict": true,
+    "pretty": true,
+    "strictFunctionTypes": true,
+    "sourceMap": false,
+    "strictNullChecks": true,
+    "allowUnreachableCode": false,
+    "strictPropertyInitialization": true,
+    "strictBindCallApply": true,
+    "outDir": "build",
+    "moduleResolution": "Node",
+    "module": "ESNext",
+    "target": "ESNext",
+    "baseUrl": "./src"
+  },
+  "include": [
+    "src",
+    "typings",
+    "tests",
+  ],
+}

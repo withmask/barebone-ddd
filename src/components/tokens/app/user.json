@@ -1,0 +1,5 @@
+{
+  "aggregates": {
+    "user": "users:aggregates:user"
+  }
+}

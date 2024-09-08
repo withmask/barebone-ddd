@@ -1,0 +1,43 @@
+{
+  "name": "barebone-ddd",
+  "version": "1.0.0",
+  "description": "An example project to speed-up production for any projects that follow the DDD standards.",
+  "main": "build/index.js",
+  "scripts": {
+    "build": "tsc && tsc-alias",
+    "build:utils": "tsc --project ./utils.tsconfig.json",
+    "lint": "eslint src",
+    "lint:fix": "eslint src --fix",
+    "validate": "node --loader ./include/loader.js dist/structure-validator/index.js",
+    "start": "node --loader ./include/loader.js build/index.js",
+    "test:build": "tsc --noEmit"
+  },
+  "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/withmask/barebone-ddd.git"
+  },
+  "author": {
+    "email": "with.mask@tutanota.com",
+    "name": "With Mask"
+  },
+  "license": "GPL-3.0-only",
+  "bugs": {
+    "url": "https://github.com/withmask/barebone-ddd/issues"
+  },
+  "homepage": "https://github.com/withmask/barebone-ddd#readme",
+  "devDependencies": {
+    "@typescript-eslint/eslint-plugin": "7.5.0",
+    "@typescript-eslint/parser": "7.5.0",
+    "eslint-config-prettier": "9.1.0",
+    "eslint-plugin-prettier": "5.1.3"
+  },
+  "dependencies": {
+    "@types/node": "20.12.3",
+    "mongoose": "8.3.1",
+    "patch-package": "8.0.0",
+    "source-map-support": "0.5.21",
+    "tsc-alias": "1.8.8",
+    "typescript": "5.4.3"
+  }
+}
