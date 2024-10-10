@@ -1,3 +1,1 @@
-import * as user from './user.json';
-
-export const userTokens = user;
+export { default as userTokens } from './user.json' assert { type: 'json' };

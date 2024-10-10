@@ -45,7 +45,7 @@
       {
         "allowedNames": [
           "default",
-          "model"
+          "collection"
         ]
       }
     ],
@@ -63,5 +63,36 @@
       }
     ],
     "@typescript-eslint/no-explicit-any": "off"
-  }
+  },
+  "overrides": [
+    {
+      "files": [
+        "src/**/*.ts",
+        "src/**/*.d.ts"
+      ],
+      "rules": {
+        "@typescript-eslint/no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              "*/**",
+              "!drivers/**",
+              "!app/**",
+              "./*",
+              "../*",
+              "*.*"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": [
+        "src/**/index.ts"
+      ],
+      "rules": {
+        "@typescript-eslint/no-restricted-imports": "off"
+      }
+    }
+  ]
 }

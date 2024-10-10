@@ -1,23 +1,19 @@
 import fs from 'fs';
-import url from 'url';
 import path from 'path';
-
+import { constants } from '@constants';
 import { Container, pluginsTokens } from 'components';
-import type { IConfigParser, IDataPlugin, IConfig } from 'shared';
 
-const __dirname = path.dirname(url.fileURLToPath(import.meta.url));
+import type { DataPlugin, IConfig } from 'shared';
 
 @Container.injectable()
-export class ConfigParser implements IConfigParser {
+export class ConfigParser {
   public config!: IConfig;
-  public readonly root: string;
   private readonly _config: string;
   public constructor(
-    @Container.inject(pluginsTokens.data)
-    private readonly _dataPlugin: IDataPlugin
+    @Container.inject(pluginsTokens.dataPlugin)
+    private readonly _dataPlugin: DataPlugin
   ) {
-    this.root = path.join(__dirname, '../../');
-    this._config = path.join(this.root, '../config.yml');
+    this._config = path.join(constants.root, '../config.yml');
   }
 
   @Container.builder()

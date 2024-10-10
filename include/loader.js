@@ -2,7 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import module from 'node:module';
 
-export const resolve = async (specifier, context, nextResolve) => {
+export async function resolve(specifier, context, nextResolve) {
   if (
     !context.parentURL?.startsWith('file:') &&
     context.parentURL !== undefined
@@ -33,4 +33,4 @@ export const resolve = async (specifier, context, nextResolve) => {
   }
 
   return await nextResolve(link, context);
-};
+}

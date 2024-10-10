@@ -1,5 +1,10 @@
 {
-  "aggregates": {
-    "user": "users:aggregates:user"
-  }
+  "controllers": {
+    "createUserController": "app:user:controllers:create-user"
+  },
+  "factories": {
+    "sessionFactory": "app:user:factories:session",
+    "userFactory": "app:user:factories:user"
+  },
+  "aggregates": {}
 }

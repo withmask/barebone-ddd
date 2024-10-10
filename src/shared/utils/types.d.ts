@@ -25,3 +25,5 @@ type TFallBackObject<F, S> = {
 };
 
 type TOverrideProperty<P extends keyof O, O, V> = Omit<O, P> & { [K in P]: V };
+
+export interface EmptyObject {}

@@ -1,14 +1,12 @@
-import { Container } from './Container';
+import { Container } from 'components';
 import type { PrivateClass } from 'components';
 
-export interface Binding<T> {
-  to: (value: new (...args: any[]) => T) => void;
-  cached(): Binding<T>;
+export interface Binding {
+  to: <T>(value: new (...args: any[]) => T) => void;
+  cached(): Binding;
 }
 
-export type ModuleListener = (
-  bind: <T = never>(identifier: string) => Binding<T>
-) => void;
+export type ModuleListener = (bind: (identifier: string) => Binding) => void;
 
 export class Module {
   private _listener: ModuleListener | null;
@@ -67,7 +65,7 @@ export class Module {
     this._listener = null;
   }
 
-  private _bind<T>(id: string): Binding<T> {
+  private _bind(id: string): Binding {
     const registry = this._registry;
 
     if (id in registry)
@@ -83,8 +81,8 @@ export class Module {
         throw new Error('Next call after .bind should be .to or .cached');
     });
 
-    const binding: Binding<T> = {
-      to(component: new (...args: any[]) => T): void {
+    const binding: Binding = {
+      to<T>(component: new (...args: any[]) => T): void {
         if (!Container['_injectableRegistry'].has(component))
           throw new Error(
             `Tried to bind token (${id}) to a non-injectable class ${component.name}.`
@@ -94,7 +92,7 @@ export class Module {
 
         registry[id] = { cached, component };
       },
-      cached(): Binding<T> {
+      cached(): Binding {
         if (cached)
           throw new Error(
             'Tried to declare component as cached multiple times.'

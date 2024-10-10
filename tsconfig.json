@@ -23,7 +23,12 @@
     "moduleResolution": "Node",
     "module": "ESNext",
     "target": "ESNext",
-    "baseUrl": "./src"
+    "baseUrl": "./src",
+    "paths": {
+      "@constants": [
+        "constants.js"
+      ]
+    },
   },
   "include": [
     "src",

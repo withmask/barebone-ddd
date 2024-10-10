@@ -41,6 +41,7 @@ export class ValueObject<T> {
       const validateResult = validate.call(this, value);
 
       if (validateResult === undefined) continue;
+      console.log(validateResult.failed());
 
       if (validateResult.failed()) return validateResult;
     }

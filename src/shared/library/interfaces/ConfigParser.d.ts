@@ -5,15 +5,29 @@ export interface IConfig {
         rules: {
           name: {
             maxNameLength: number;
-            minNumberLength: number;
+            minNameLength: number;
           };
+        };
+      };
+    };
+  };
+  drivers: {
+    mongo: {
+      connections: {
+        [connection: string]: {
+          domains: {
+            [domain: string]: {
+              [repo: string]: {
+                collection: string;
+                database: string;
+              };
+            };
+          };
+          uri: string;
         };
       };
     };
   };
 }
 
-export interface IConfigParser {
-  readonly config: IConfig;
-  readonly root: string;
-}
+//REPO: DOMAIN:REPO -> con:db:col

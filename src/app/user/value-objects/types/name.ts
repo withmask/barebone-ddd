@@ -1,5 +1,6 @@
+import { isValidName } from 'app/user';
+
 import { StringValueObject } from 'shared';
-import { isValidName } from '../modifiers';
 
 export class NameValueObject extends StringValueObject {
   private constructor() {

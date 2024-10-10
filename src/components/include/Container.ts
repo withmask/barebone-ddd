@@ -199,6 +199,14 @@ export class Container {
     await this._prepare();
 
     this._ready = true;
+
+    for (const componentID in this._registry) {
+      if (Object.prototype.hasOwnProperty.call(this._registry, componentID)) {
+        const component = this._registry[componentID];
+
+        if (component.cached) await this.get(componentID);
+      }
+    }
   }
 
   private async _get(
@@ -268,11 +276,11 @@ export class Container {
             'Tried to bind a component that was already bound. Modules or Sources may have conflicting tokens or modules.'
           );
 
-        const element = Container._injectableRegistry.get(component);
+        const element = Container._injectableRegistry.get(component.component);
 
         if (element === undefined)
           throw new Error(
-            'A module seems to have bound a non-injectable class.'
+            `A module seems to have bound a non-injectable class: ${component.component.constructor.name}.`
           );
 
         Container._injectableRegistry.delete(component);
@@ -286,14 +294,6 @@ export class Container {
   }
 
   private async _prepare(): Promise<void> {
-    for (const componentID in this._registry) {
-      if (Object.prototype.hasOwnProperty.call(this._registry, componentID)) {
-        const component = this._registry[componentID];
-
-        if (component.cached) await this.get(componentID);
-      }
-    }
-
     for (const automatic of Container._automatic) {
       await this.build(automatic);
     }

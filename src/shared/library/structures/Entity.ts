@@ -19,7 +19,7 @@ export class Entity<V, P = null, M = never> {
 
   public constructor(
     public readonly id: string,
-    public readonly properties: Readonly<P>
+    public readonly properties: P
   ) {
     const self = this;
 

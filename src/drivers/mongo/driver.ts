@@ -1,53 +1,52 @@
-import mongoose from 'mongoose';
+import mongodb from 'mongodb';
 import { Container } from 'components';
-import { mongooseUserSchema } from 'drivers/mongo';
 
-import type { IKnownModels, IMongoDriver } from 'drivers/mongo';
+import type { IMongoDriverModels } from 'drivers/mongo';
+import type { ConfigParser, IBaseDriver } from 'shared';
 
 @Container.injectable()
-export class MongoDriver implements IMongoDriver {
-  private _models: {
-    [K in keyof IKnownModels]: mongoose.Schema<IKnownModels[K]>;
-  };
-  private _mongoClient: mongoose.Connection | null;
+export class MongoDriver implements IBaseDriver {
+  private _connections: { [connection: string]: mongodb.MongoClient };
 
-  public constructor() {
-    this._mongoClient = null;
-    this._models = {
-      user: mongooseUserSchema
-    };
+  public constructor(private readonly _configParser: ConfigParser) {
+    this._connections = {};
   }
 
-  public model<K extends keyof IKnownModels>(
-    name: K
-  ): mongoose.Model<IKnownModels[K]> {
-    //@TODO Awful, just fucking disgusting.
-    if (this._mongoClient === null) {
-      console.log(
-        'warn',
-        'Supplying shadow model. Database was not initiated before this call. Are we in an ephemeral environment ?',
-        null
-      );
-      console.log(
-        'warn',
-        'This is awful behaviour and should be replaced by delaying the mongodb connection until requested while still providing a constructed class.',
-        null
+  public model<
+    D extends keyof IMongoDriverModels,
+    R extends keyof IMongoDriverModels[D]
+  >(
+    domain: D,
+    repo: R
+  ): mongodb.Collection<
+    IMongoDriverModels[D][R] extends mongodb.Document
+      ? IMongoDriverModels[D][R]
+      : never
+  > {
+    const instance = Object.entries(
+      this._configParser.config.drivers.mongo.connections
+    ).find((v) => domain in v[1].domains && repo in v[1].domains[domain]);
+
+    if (!instance)
+      throw new Error(
+        `No instance to handle repo ${repo as string} for ${domain}`
       );
 
-      return new Proxy(Object.create(null), {
-        get(_, p): never {
-          throw new Error(
-            `Cannot execute operation ${p.toString()} on shadow model.`
-          );
-        }
-      });
-    }
+    const { collection, database } =
+      instance[1].domains[domain][
+        repo as keyof (typeof instance)[1]['domains'][typeof domain]
+      ];
 
-    let formattedName = name.toLowerCase();
+    const connection = this._connections[instance[0]];
+
+    if (connection === undefined)
+      throw new Error(`No connection found for: ${instance[0]}`);
+
+    let formattedName = collection.toLowerCase();
 
     if (!formattedName.endsWith('s')) formattedName += 's';
 
-    return this._mongoClient!.model<IKnownModels[K]>(formattedName) as any;
+    return connection!.db(database).collection(collection) as any;
   }
 
   public async startDriver(): Promise<void> {
@@ -57,22 +56,32 @@ export class MongoDriver implements IMongoDriver {
   }
 
   public async stopDriver(): Promise<void> {
-    await this._mongoClient!.close(true);
-    this._mongoClient = null;
+    for (const connection of Object.values(this._connections)) {
+      await connection.close();
+    }
+
+    this._connections = {};
   }
 
   private async connect(): Promise<void> {
-    this._mongoClient = mongoose.createConnection(process.env.MONGO_URI, {
-      dbName: process.env.MONGO_DATABASE
-    });
+    for (const connectionName in this._configParser.config.drivers.mongo
+      .connections) {
+      if (
+        Object.prototype.hasOwnProperty.call(
+          this._configParser.config.drivers.mongo.connections,
+          connectionName
+        )
+      ) {
+        console.log('MongoDB Connecting to:', connectionName);
+        const element =
+          this._configParser.config.drivers.mongo.connections[connectionName];
 
-    for (const key in this._models) {
-      if (Object.prototype.hasOwnProperty.call(this._models, key)) {
-        const schema = this._models[key as keyof typeof this._models];
-        this._mongoClient.model(key, schema);
+        const client = new mongodb.MongoClient(process.env[element.uri]!);
+
+        await client.connect();
+
+        this._connections[connectionName] = client;
       }
     }
-
-    await this._mongoClient.asPromise();
   }
 }

@@ -10,4 +10,4 @@ COPY . .
 
 RUN npm run build
 
-ENTRYPOINT [ "node", "--loader", "./include/loader.js", "build/index.js" ]
+ENTRYPOINT [ "node", "build/index.js" ]

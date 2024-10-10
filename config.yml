@@ -1,0 +1,27 @@
+app:
+  domains:
+    user:
+      rules:
+        name:
+          maxNameLength: 32
+          minNameLength: 16
+
+drivers:
+  mongo:
+    connections:
+      atlas_primary:
+        uri: MONGODB_ATLAS_PRIMARY
+        domains:
+          user:
+            users:
+              collection: users
+              database: primary
+            sessions:
+              collection: sessions
+              database: primary
+
+          cards:
+            cards:
+              collection: cards
+              database: primary
+            

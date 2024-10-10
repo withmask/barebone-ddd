@@ -1,8 +1,12 @@
 import { Container } from 'components';
-import { getCallerPath, NoHandlerForRPCCommandException, Result } from 'shared';
 
-import type { IContainer } from 'components';
-import type { TResult, TVoidResult } from 'shared';
+import {
+  getApplicationCaller,
+  NoHandlerForRPCCommandException,
+  Result
+} from 'shared';
+
+import type { EmptyObject, TResult, TVoidResult } from 'shared';
 
 export interface TImmediateEventOptions<Data> {
   data: Data;
@@ -58,7 +62,7 @@ export type TEventReturn<Conditional extends boolean> = [Conditional] extends [
  * The event manager should provide a feature for listeners to abort previous events of the same handler with custom condition expressions, for the sake of simplicity so far, only have an "$EQ" condition.
  *
  */
-@Container.injectable()
+@Container.auto()
 export class ApplicationEventManager {
   private static _pending: {
     events: Map<
@@ -125,7 +129,7 @@ export class ApplicationEventManager {
 
   public constructor(
     @Container.injectContainer()
-    private _container: IContainer
+    private _container: Container
   ) {}
 
   public static async call<Req, Res>(
@@ -135,7 +139,7 @@ export class ApplicationEventManager {
     if (!ApplicationEventManager._registry.ready)
       throw new Error('Emitting event before manager is ready');
 
-    const domain = ApplicationEventManager._getEmitterDomain();
+    const { domain } = getApplicationCaller();
 
     if (!(domain in ApplicationEventManager._registry.rpc))
       return Result.fail(new NoHandlerForRPCCommandException(command, domain));
@@ -157,7 +161,7 @@ export class ApplicationEventManager {
     if (!ApplicationEventManager._registry.ready)
       throw new Error('Emitting event before manager is ready');
 
-    const domain = ApplicationEventManager._getEmitterDomain();
+    const { domain } = getApplicationCaller();
 
     if (!(domain in ApplicationEventManager._registry.events))
       return Result.done();
@@ -202,7 +206,7 @@ export class ApplicationEventManager {
   public static event<I extends boolean, C extends boolean = false>(
     options: {
       immediate: I;
-    } & ([I] extends [false] ? { conditional: C } : { [key: string]: never })
+    } & ([I] extends [false] ? { conditional: C } : EmptyObject)
   ): <
     T extends (
       args: [C] extends [true]
@@ -220,7 +224,7 @@ export class ApplicationEventManager {
 
       registeredEvents.push({
         name: property as string,
-        conditional: options.conditional || false,
+        conditional: options['conditional' as 'immediate'] || false,
         immediate: options.immediate
       });
 
@@ -233,7 +237,7 @@ export class ApplicationEventManager {
 
   public static listener(domain: string): ClassDecorator {
     return (target: any) => {
-      const listener = ApplicationEventManager._getEmitterDomain();
+      const { domain: listener } = getApplicationCaller();
 
       const events = ApplicationEventManager._pending.events.get(target) || [],
         rpc = ApplicationEventManager._pending.rpc.get(target) || [];
@@ -281,10 +285,6 @@ export class ApplicationEventManager {
     };
   }
 
-  private static _getEmitterDomain(): string {
-    return getCallerPath()!.match(/src\/app\/([^/]+)\//)![1];
-  }
-
   @Container.builder()
   protected async prepare(): Promise<void> {
     const newRegistry: {
@@ -326,10 +326,10 @@ export class ApplicationEventManager {
     if (ApplicationEventManager._registry.ready)
       throw new Error('Building event manager when it was already booted.');
 
-    for (const domain in ApplicationEventManager._registry) {
+    for (const domain in ApplicationEventManager._registry.pending) {
       if (
         Object.prototype.hasOwnProperty.call(
-          ApplicationEventManager._registry,
+          ApplicationEventManager._registry.pending,
           domain
         )
       ) {

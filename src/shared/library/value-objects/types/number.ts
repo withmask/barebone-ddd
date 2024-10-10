@@ -3,11 +3,8 @@ import { ValueObject, Result, InvalidValueTypeException } from 'shared';
 import type { TValidator } from 'shared';
 
 export class NumberValueObject extends ValueObject<number> {
-  protected constructor(
-    validators: TValidator<number>[],
-    ...args: [value?: number]
-  ) {
-    super(validators, ...args);
+  protected constructor(validators: TValidator<number>[]) {
+    super(validators);
 
     super.validate((value) => {
       if (typeof value !== 'number')

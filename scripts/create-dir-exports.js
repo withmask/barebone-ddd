@@ -11,24 +11,13 @@ const ignoreDirs = [];
 
 const layers = fs.readdirSync(source);
 
-function fileNameToVariableName(fileName) {
-  const nameWithoutExtension = fileName.replace(/\.[^/.]+$/, '');
-
-  const validIdentifier = nameWithoutExtension
-    .replace(/[^a-zA-Z0-9]+(.)/g, (_, chr) => chr.toUpperCase())
-    .replace(/^[^a-zA-Z]+/, '');
-
-  return validIdentifier;
-}
-
 const extensions = {
   'd.ts': (name) => ({
     ex: `export type * from './${name}.d';`
   }),
   ts: (name) => ({ ex: `export * from './${name}';` }),
   json: (name) => ({
-    im: `import * as ${fileNameToVariableName(name)} from './${name}.json';`,
-    ex: `export const ${name}Tokens = ${fileNameToVariableName(name)};`
+    ex: `export { default as ${name}Tokens } from './${name}.json' assert { type: 'json' };`
   })
 };
 
@@ -83,7 +72,8 @@ function processDir(dir, noWrite = false) {
           a === 'core' ||
           a === 'tokens' ||
           a === 'components' ||
-          a === 'library'
+          a === 'library' ||
+          a === 'structures'
             ? -1
             : a.localeCompare(b)
         )

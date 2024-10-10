@@ -30,22 +30,10 @@
       {
         "command": "structure",
         "root": "src/app/{domain}/application",
-        "dirs": ["controllers", "typings"],
+        "dirs": ["controllers", "dtos"],
         "files": [],
         "optional": {
           "dirs": ["subscribers", "exceptions"],
-          "files": []
-        },
-        "skip": ["index.ts"]
-      },
-
-      {
-        "command": "structure",
-        "root": "src/app/{domain}/application/typings",
-        "dirs": ["controllers"],
-        "files": [],
-        "optional": {
-          "dirs": [],
           "files": []
         },
         "skip": ["index.ts"]
@@ -83,7 +71,7 @@
                   },
                   {
                     "command": "is-file",
-                    "path": "src/app/{domain}/application/typings/controllers/{controllerName}.d.ts"
+                    "path": "src/app/{domain}/application/dtos/{controllerName}.d.ts"
                   },
                   {
                     "command": "registry",
@@ -105,13 +93,13 @@
             "command": "if",
             "condition": {
               "name": "not-empty",
-              "directory": "src/app/{domain}/application/typings/controllers",
+              "directory": "src/app/{domain}/application/dtos",
               "ignore": ["index.ts"]
             },
             "then": [
               {
                 "command": "readdir",
-                "directory": "src/app/{domain}/application/typings/controllers",
+                "directory": "src/app/{domain}/application/dtos",
                 "variable": "controller",
                 "extensionless": "controllerName",
                 "filter": "file-only",
@@ -130,7 +118,7 @@
                     "then": [
                       {
                         "command": "error",
-                        "message": "Domain {domain} has definition for an undefined controller: {controllerName}"
+                        "message": "Domain {domain} has DTOs for an undefined controller: {controllerName}"
                       }
                     ]
                   }
@@ -384,14 +372,6 @@
                 "command": "registry",
                 "cmd": "UNREG",
                 "reg": "value-objects/{domain}"
-              },
-              {
-                "command": "find-unique",
-                "regs": ["A", "B"],
-                "variable": "element",
-                "every": {
-                  "A": []
-                }
               }
             ]
           }
@@ -402,74 +382,89 @@
         "name": "Aggregates {domain}",
         "commands": [
           {
-            "command": "readdir",
-            "directory": "src/app/{domain}/aggregates",
-            "every": [
+            "command": "if",
+            "condition": {
+              "name": "exists",
+              "path": "src/app/{domain}/aggregates"
+            },
+            "then": [
               {
-                "command": "structure",
-                "root": "src/app/{domain}/aggregates/{aggregateName}",
-                "dirs": ["core", "typings"],
-                "optional": {
-                  "dirs": ["exceptions"],
-                  "files": []
-                },
-                "files": ["root.ts"],
-                "skip": ["index.ts"]
-              },
-              {
-                "command": "structure",
-                "root": "src/app/{domain}/aggregates/{aggregateName}/core",
-                "dirs": [],
-                "files": [
-                  "aggregate.ts",
-                  "factory.ts",
-                  "mapper.ts",
-                  "methods.ts"
-                ],
-                "optional": {
-                  "dirs": [],
-                  "files": []
-                },
-                "skip": ["index.ts"]
-              },
-              {
-                "command": "structure",
-                "root": "src/app/{domain}/aggregates/{aggregateName}/typings",
-                "dirs": [],
-                "files": ["factory.d.ts", "mapper.d.ts", "root.d.ts"],
-                "optional": {
-                  "dirs": [],
-                  "files": []
-                },
-                "skip": ["index.ts"]
-              },
-              {
-                "command": "if",
-                "condition": {
-                  "name": "exists",
-                  "path": "src/app/{domain}/aggregates/{aggregateName}/exceptions"
-                },
-                "then": [
+                "command": "readdir",
+                "directory": "src/app/{domain}/aggregates",
+                "every": [
                   {
-                    "command": "readdir",
-                    "directory": "src/app/{domain}/aggregates/{aggregateName}/exceptions",
-                    "filter": "file-only",
-                    "skip": ["index.ts"],
-                    "variable": "exception",
-                    "every": [
+                    "command": "structure",
+                    "root": "src/app/{domain}/aggregates/{aggregateName}",
+                    "dirs": ["core", "typings"],
+                    "optional": {
+                      "dirs": ["exceptions"],
+                      "files": []
+                    },
+                    "files": ["root.ts"],
+                    "skip": ["index.ts"]
+                  },
+                  {
+                    "command": "structure",
+                    "root": "src/app/{domain}/aggregates/{aggregateName}/core",
+                    "dirs": [],
+                    "files": [
+                      "aggregate.ts",
+                      "factory.ts",
+                      "mapper.ts",
+                      "methods.ts"
+                    ],
+                    "optional": {
+                      "dirs": [],
+                      "files": []
+                    },
+                    "skip": ["index.ts"]
+                  },
+                  {
+                    "command": "structure",
+                    "root": "src/app/{domain}/aggregates/{aggregateName}/typings",
+                    "dirs": [],
+                    "files": ["factory.d.ts", "mapper.d.ts", "root.d.ts"],
+                    "optional": {
+                      "dirs": [],
+                      "files": []
+                    },
+                    "skip": ["index.ts"]
+                  },
+                  {
+                    "command": "if",
+                    "condition": {
+                      "name": "exists",
+                      "path": "src/app/{domain}/aggregates/{aggregateName}/exceptions"
+                    },
+                    "then": [
                       {
-                        "command": "is-ext",
-                        "ext": "ts",
-                        "file": "{exception}"
+                        "command": "readdir",
+                        "directory": "src/app/{domain}/aggregates/{aggregateName}/exceptions",
+                        "filter": "file-only",
+                        "skip": ["index.ts"],
+                        "variable": "exception",
+                        "every": [
+                          {
+                            "command": "is-ext",
+                            "ext": "ts",
+                            "file": "{exception}"
+                          }
+                        ]
                       }
                     ]
                   }
-                ]
+                ],
+                "filter": "dir-only",
+                "skip": ["index.ts"],
+                "variable": "aggregateName"
               }
             ],
-            "filter": "dir-only",
-            "skip": ["index.ts"],
-            "variable": "aggregateName"
+            "else": [
+              {
+                "command": "warn",
+                "message": "Domain {domain} has no aggregates."
+              }
+            ]
           }
         ]
       }
