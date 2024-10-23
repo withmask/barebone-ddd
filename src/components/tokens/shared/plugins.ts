@@ -1,3 +1,4 @@
 export const pluginsTokens = {
-  dataPlugin: 'plugins:data-plugin'
+  dataPlugin: 'plugins:data-plugin',
+  cryptoPlugin: 'plugins:crypto-plugin'
 };

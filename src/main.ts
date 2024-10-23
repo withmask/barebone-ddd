@@ -1,14 +1,21 @@
 import type { CreateUserController } from 'app/user';
-import { container, userTokens } from 'components';
+import { container, mongoDriverTokens, userTokens } from 'components';
+import type { MongoDriver } from 'drivers/mongo';
 
 await container.load();
 
-const createUserController = await container.get<CreateUserController>(
+const m = await container.get<MongoDriver>(mongoDriverTokens.driver);
+
+await m.startDriver();
+
+const x = await container.get<CreateUserController>(
   userTokens.controllers.createUserController
 );
 
-await createUserController.execute({
+const y = await x.execute({
   email: 'with.mask@tutanota.com',
-  name: 'With MaskWith MaskWith MaskWith MaskWith MaskWith MaskWith MaskWith MaskWith MaskWith Mask',
-  password: 'LOL'
+  name: 'Good Morning',
+  password: 'Cool password'
 });
+
+console.log(y.lazy());

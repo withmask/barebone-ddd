@@ -1,4 +1,8 @@
-import { ValueObject, Result, InvalidValueTypeException } from 'shared';
+import {
+  ValueObject,
+  Result,
+  InvalidValueObjectInputTypeException
+} from 'shared';
 
 import type { TValidator } from 'shared';
 
@@ -9,7 +13,7 @@ export class NumberValueObject extends ValueObject<number> {
     super.validate((value) => {
       if (typeof value !== 'number')
         return Result.fail(
-          new InvalidValueTypeException('number', typeof value)
+          new InvalidValueObjectInputTypeException('number', typeof value)
         );
     });
   }

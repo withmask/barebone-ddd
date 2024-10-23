@@ -365,11 +365,6 @@
               },
               {
                 "command": "registry",
-                "cmd": "",
-                "reg": "value-objects/{domain}"
-              },
-              {
-                "command": "registry",
                 "cmd": "UNREG",
                 "reg": "value-objects/{domain}"
               }
@@ -395,7 +390,7 @@
                   {
                     "command": "structure",
                     "root": "src/app/{domain}/aggregates/{aggregateName}",
-                    "dirs": ["core", "typings"],
+                    "dirs": ["core"],
                     "optional": {
                       "dirs": ["exceptions"],
                       "files": []
@@ -413,17 +408,6 @@
                       "mapper.ts",
                       "methods.ts"
                     ],
-                    "optional": {
-                      "dirs": [],
-                      "files": []
-                    },
-                    "skip": ["index.ts"]
-                  },
-                  {
-                    "command": "structure",
-                    "root": "src/app/{domain}/aggregates/{aggregateName}/typings",
-                    "dirs": [],
-                    "files": ["factory.d.ts", "mapper.d.ts", "root.d.ts"],
                     "optional": {
                       "dirs": [],
                       "files": []

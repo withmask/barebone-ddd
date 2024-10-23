@@ -17,11 +17,9 @@ export interface IConfig {
         [connection: string]: {
           domains: {
             [domain: string]: {
-              [repo: string]: {
-                collection: string;
-                database: string;
-              };
-            };
+              collections: { [key: string]: string };
+              database: string;
+            }[];
           };
           uri: string;
         };

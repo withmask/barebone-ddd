@@ -18,7 +18,8 @@ for (const domain of fs.readdirSync(domainsSource)) {
       //   mapper: '',
       //   root: ''
       // }
-    }
+    },
+    repositories: {}
   };
 
   const currentDomainPath = path.join(domainsSource, domain);
@@ -51,6 +52,21 @@ for (const domain of fs.readdirSync(domainsSource)) {
 
     currentDomain.factories[factoryName] =
       `app:${domain}:factories:${fileName}`;
+  }
+
+  for (const repository of fs.readdirSync(
+    path.join(currentDomainPath, 'repositories')
+  )) {
+    if (repository === 'index.ts') continue;
+
+    const fileName = repository.split('.')[0];
+
+    const factoryName =
+      fileName.replace(/-[a-z]/g, (v) => v.slice(1).toUpperCase()) +
+      'Repository';
+
+    currentDomain.repositories[factoryName] =
+      `app:${domain}:repositories:${factoryName}`;
   }
 
   fs.writeFileSync(

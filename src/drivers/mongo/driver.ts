@@ -1,5 +1,5 @@
 import mongodb from 'mongodb';
-import { Container } from 'components';
+import { Container, libraryTokens } from 'components';
 
 import type { IMongoDriverModels } from 'drivers/mongo';
 import type { ConfigParser, IBaseDriver } from 'shared';
@@ -8,7 +8,10 @@ import type { ConfigParser, IBaseDriver } from 'shared';
 export class MongoDriver implements IBaseDriver {
   private _connections: { [connection: string]: mongodb.MongoClient };
 
-  public constructor(private readonly _configParser: ConfigParser) {
+  public constructor(
+    @Container.inject(libraryTokens.configParser)
+    private readonly _configParser: ConfigParser
+  ) {
     this._connections = {};
   }
 
@@ -25,17 +28,21 @@ export class MongoDriver implements IBaseDriver {
   > {
     const instance = Object.entries(
       this._configParser.config.drivers.mongo.connections
-    ).find((v) => domain in v[1].domains && repo in v[1].domains[domain]);
+    ).find(
+      (v) =>
+        domain in v[1].domains &&
+        v[1].domains[domain].some((v) => repo in v.collections)
+    );
 
     if (!instance)
       throw new Error(
         `No instance to handle repo ${repo as string} for ${domain}`
       );
 
-    const { collection, database } =
-      instance[1].domains[domain][
-        repo as keyof (typeof instance)[1]['domains'][typeof domain]
-      ];
+    const { collections, database } = instance[1].domains[domain].find(
+        (v) => repo in v.collections
+      )!,
+      collection = collections[repo as keyof typeof collections];
 
     const connection = this._connections[instance[0]];
 

@@ -6,5 +6,8 @@
     "sessionFactory": "app:user:factories:session",
     "userFactory": "app:user:factories:user"
   },
-  "aggregates": {}
+  "aggregates": {},
+  "repositories": {
+    "userRepository": "app:user:repositories:userRepository"
+  }
 }

@@ -1,6 +1,6 @@
 import { Exception } from 'shared';
 
-export class ReadonlyValueObjectException extends Exception<'validation'> {
+export class EmailUnavailableException extends Exception<'validation'> {
   public constructor() {
     super('validation');
   }
