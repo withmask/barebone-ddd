@@ -1,12 +1,18 @@
-import type { TExceptionKind } from 'shared';
+import type { TExceptionKind, TVoidResult } from 'shared';
 
 export interface IEventFailureHistory {
   event: {
-    createdAt: number;
     data: any;
-    emitter: string;
+
+    emittedAt: number;
+
+    emitter: {
+      domain: string;
+      event: string;
+      type: 'domain';
+    };
+
     id: string;
-    name: string;
   };
 
   failure: {
@@ -24,11 +30,16 @@ export interface IEventFailureHistory {
   };
 
   handler: {
-    domain: 'string';
-    name: 'string';
-
-    state: {
-      attempts: number;
-    };
+    domain: string;
+    listener: string;
+    type: 'domain';
   };
+
+  state: {
+    attempts: number;
+  };
+}
+
+export interface IEventFailureHistoryRepository {
+  saveFailure(event: IEventFailureHistory): Promise<TVoidResult>;
 }

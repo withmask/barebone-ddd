@@ -26,4 +26,12 @@ type TFallBackObject<F, S> = {
 
 type TOverrideProperty<P extends keyof O, O, V> = Omit<O, P> & { [K in P]: V };
 
-export interface EmptyObject {}
+export interface IEmptyObject {}
+
+export type TRemapID<M extends { id: string }> = Omit<M, 'id'> & {
+  _id: M['id'];
+};
+
+type TDeepPartial<T> = {
+  [P in keyof T]?: TDeepPartial<T[P]>;
+};

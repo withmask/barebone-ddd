@@ -1,10 +1,10 @@
 FROM node:lts
 
-WORKDIR /usr/src/app
+WORKDIR /usr/src
 
 COPY package*.json .
 
-RUN npm install
+RUN npm install --production
 
 COPY . .
 

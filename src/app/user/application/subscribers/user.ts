@@ -1,16 +1,30 @@
 import type { IUserCreatedEvent } from 'app/user';
 
-import type { TImmediateEventOptions, TVoidResult } from 'shared';
+import type { TEventOptions, TVoidResult } from 'shared';
 import { ApplicationEventManager, Result } from 'shared';
 
 @ApplicationEventManager.listener('user')
 export class UserSubscribers {
-  @ApplicationEventManager.event({ immediate: true })
+  @ApplicationEventManager.event({ immediate: false })
   public async userCreated(
-    event: TImmediateEventOptions<IUserCreatedEvent>
+    event: TEventOptions<IUserCreatedEvent>
   ): Promise<TVoidResult> {
     console.log({ event });
 
     return Result.done();
   }
+
+  // @ApplicationEventManager.event({ immediate: true })
+  // public async userDeleted(
+  //   event: TEventOptions<IUserDeletedEvent>
+  // ): Promise<TVoidResult> {
+  //   const removeEventResult = await event.removeEvent<IUserCreatedEvent>(
+  //     'userCreated',
+  //     { id: event.data.user }
+  //   );
+
+  //   if (removeEventResult.failed()) return removeEventResult;
+
+  //   return Result.done();
+  // }
 }

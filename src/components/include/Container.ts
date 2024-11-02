@@ -203,7 +203,6 @@ export class Container {
     for (const componentID in this._registry) {
       if (Object.prototype.hasOwnProperty.call(this._registry, componentID)) {
         const component = this._registry[componentID];
-
         if (component.cached) await this.get(componentID);
       }
     }

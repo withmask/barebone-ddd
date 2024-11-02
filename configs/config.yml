@@ -1,4 +1,0 @@
-app:
-  user:
-    nameRules:
-      maxLength: 26

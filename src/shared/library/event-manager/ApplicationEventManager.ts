@@ -1,44 +1,33 @@
-import { Container } from 'components';
+import util from 'util';
+import { Container, eventsManagerTokens, pluginsTokens } from 'components';
 
 import {
   getApplicationCaller,
   NoHandlerForRPCCommandException,
+  NoHandlerFoundException,
   Result
 } from 'shared';
 
-import type { EmptyObject, TResult, TVoidResult } from 'shared';
+import type {
+  CryptoPlugin,
+  IEvent,
+  IEventFailureHistoryRepository,
+  IEventHandler,
+  IEventHandlerRepository,
+  IEventRepository,
+  TDeepPartial,
+  TResult,
+  TVoidResult
+} from 'shared';
 
-export interface TImmediateEventOptions<Data> {
+export interface TEventOptions<Data> {
   data: Data;
+  removeEvent<E>(
+    name: string,
+    match: TDeepPartial<E>,
+    eventDomain?: string
+  ): Promise<TVoidResult>;
 }
-
-type TValidEventOverrideMatchOperands = '$EQ';
-
-export type TConditionalEventReturn =
-  | TResult<{ conditions: { [key: string]: string } }>
-  | TVoidResult;
-
-export type TConditionalEventOptions<Data> =
-  | {
-      data: Data;
-      type: 'extractConditions';
-    }
-  | {
-      conditions: {
-        [key: string]: string;
-      };
-      data: Data;
-      type: 'handle';
-      override(conditions: {
-        [key: string]: { [K in TValidEventOverrideMatchOperands]: string };
-      }): Promise<TVoidResult>;
-    };
-
-export type TEventReturn<Conditional extends boolean> = [Conditional] extends [
-  true
-]
-  ? TConditionalEventReturn
-  : TVoidResult;
 
 /**
  * @class ApplicationEventManager
@@ -64,10 +53,12 @@ export type TEventReturn<Conditional extends boolean> = [Conditional] extends [
  */
 @Container.auto()
 export class ApplicationEventManager {
+  private static __instance: ApplicationEventManager | null = null;
+
   private static _pending: {
     events: Map<
       new (...args: any[]) => any,
-      { conditional: boolean; immediate: boolean; name: string }[]
+      { immediate: boolean; name: string }[]
     >;
     rpc: Map<
       new (...args: any[]) => any,
@@ -81,7 +72,6 @@ export class ApplicationEventManager {
           [domain: string]: {
             domain: string;
             events: {
-              conditional: boolean;
               immediate: boolean;
               name: string;
             }[];
@@ -94,29 +84,12 @@ export class ApplicationEventManager {
     | {
         events: {
           [domain: string]: {
-            [event: string]: (
-              | {
-                  conditional: true;
-                  immediate: false;
-                  method: (
-                    event: TConditionalEventOptions<any>
-                  ) => Promise<TEventReturn<true>>;
-                }
-              | {
-                  conditional: false;
-                  immediate: false;
-                  method: (
-                    event: TImmediateEventOptions<any>
-                  ) => Promise<TEventReturn<false>>;
-                }
-              | {
-                  conditional: false;
-                  immediate: true;
-                  method: (
-                    event: TImmediateEventOptions<any>
-                  ) => Promise<TEventReturn<false>>;
-                }
-            )[];
+            [event: string]: {
+              domain: string;
+              immediate: boolean;
+              listener: string;
+              method: (event: TEventOptions<any>) => Promise<TVoidResult>;
+            }[];
           };
         };
         ready: true;
@@ -129,8 +102,23 @@ export class ApplicationEventManager {
 
   public constructor(
     @Container.injectContainer()
-    private _container: Container
+    private readonly _container: Container,
+    @Container.inject(eventsManagerTokens.repositories.events)
+    private readonly _eventRepository: IEventRepository,
+    @Container.inject(eventsManagerTokens.repositories.eventsHandlers)
+    private readonly _eventHandlerRepository: IEventHandlerRepository,
+    @Container.inject(eventsManagerTokens.repositories.eventsFailure)
+    private readonly _eventFailureHistoryRepository: IEventFailureHistoryRepository,
+    @Container.inject(pluginsTokens.cryptoPlugin)
+    private readonly _cryptoPlugin: CryptoPlugin
   ) {}
+
+  private static get instance(): ApplicationEventManager {
+    if (ApplicationEventManager.__instance)
+      return ApplicationEventManager.__instance;
+
+    throw new Error('Application Event Manager instance not initiated.');
+  }
 
   public static async call<Req, Res>(
     command: string,
@@ -169,51 +157,76 @@ export class ApplicationEventManager {
     if (!(event in ApplicationEventManager._registry.events[domain]))
       return Result.done();
 
+    const generateIDResult =
+      await ApplicationEventManager.instance._cryptoPlugin.generateRandomUUID();
+
+    if (generateIDResult.failed()) return generateIDResult;
+
+    let eventNeededToBeStored = false;
+
     for (const listener of ApplicationEventManager._registry.events[domain][
       event
     ]) {
       if (listener.immediate) {
-        const eventResult = await listener.method({ data });
+        const eventResult = await listener.method({
+          data,
+          removeEvent: ApplicationEventManager._createEventRemove(domain)
+        });
 
         if (eventResult.failed()) return eventResult;
       } else {
-        if (listener.conditional) {
-          const result = await listener.method({
-            type: 'extractConditions',
-            data
-          });
+        eventNeededToBeStored = true;
 
-          if (result.failed()) return result;
-        } else {
-          /**
-           * @placeholder
-           * @todo Save event for later executions
-           */
-        }
+        const generateHandlerIDResult =
+          await ApplicationEventManager.instance._cryptoPlugin.generateRandomUUID();
 
-        /**
-         * @todo Save event and propagate it to listeners
-         * @todo If event was conditional save event data
-         * @todo If event was not conditional do not save event data
-         * @todo Immediately try running the event but do not crash the system if it fails
-         */
+        if (generateHandlerIDResult.failed()) return generateHandlerIDResult;
+
+        const addEventHandlerResult =
+          await ApplicationEventManager.instance._eventHandlerRepository.addEventHandler(
+            {
+              id: generateHandlerIDResult.value(),
+              createdAt: Date.now(),
+              event: generateIDResult.value(),
+              listener: {
+                domain: listener.domain,
+                type: 'domain',
+                listener: listener.listener
+              },
+              state: {
+                acquiredAt: null,
+                failures: 0,
+                lockedAt: null
+              }
+            }
+          );
+
+        if (addEventHandlerResult.failed()) return addEventHandlerResult;
       }
+    }
+
+    if (eventNeededToBeStored) {
+      const storeEventResult =
+        await ApplicationEventManager.instance._eventRepository.storeEvent({
+          data,
+          emittedAt: Date.now(),
+          emitter: {
+            domain,
+            event,
+            type: 'domain'
+          },
+          id: generateIDResult.value()
+        });
+
+      if (storeEventResult.failed()) return storeEventResult;
     }
 
     return Result.done();
   }
 
-  public static event<I extends boolean, C extends boolean = false>(
-    options: {
-      immediate: I;
-    } & ([I] extends [false] ? { conditional: C } : EmptyObject)
-  ): <
-    T extends (
-      args: [C] extends [true]
-        ? TConditionalEventOptions<any>
-        : TImmediateEventOptions<any>
-    ) => Promise<TEventReturn<C>>
-  >(
+  public static event<I extends boolean>(options: {
+    immediate: I;
+  }): <T extends (args: TEventOptions<any>) => Promise<TVoidResult>>(
     target: object,
     propertyKey: string | symbol,
     descriptor: TypedPropertyDescriptor<T>
@@ -224,7 +237,6 @@ export class ApplicationEventManager {
 
       registeredEvents.push({
         name: property as string,
-        conditional: options['conditional' as 'immediate'] || false,
         immediate: options.immediate
       });
 
@@ -233,6 +245,125 @@ export class ApplicationEventManager {
         registeredEvents
       );
     };
+  }
+
+  public static async handleNextEvent(): Promise<TVoidResult> {
+    const eventHandlerResult =
+      await ApplicationEventManager.instance._eventHandlerRepository.getNextEventHandler();
+
+    if (eventHandlerResult.failed()) return eventHandlerResult;
+
+    const eventHandler = eventHandlerResult.value();
+
+    if (eventHandler === null) {
+      // console.log('No events to handle.');
+      return Result.done();
+    }
+
+    const eventResult =
+      await ApplicationEventManager.instance._eventRepository.getByID(
+        eventHandler.event
+      );
+
+    if (eventResult.failed()) return eventResult;
+
+    const event = eventResult.value();
+
+    if (event === null) {
+      console.log(`Can't find event: ${eventHandler.event}`);
+      const deleteEventHandlerResult =
+        await ApplicationEventManager.instance._eventHandlerRepository.deleteByEvents(
+          [eventHandler.event]
+        );
+
+      if (deleteEventHandlerResult.failed()) return deleteEventHandlerResult;
+
+      return Result.done();
+    }
+
+    try {
+      const handleEventResult =
+        await ApplicationEventManager._handleDelayedEvent(event, eventHandler);
+
+      if (handleEventResult.failed()) {
+        const exception = handleEventResult.error();
+        const addEventFailureHistoryResult =
+          await ApplicationEventManager.instance._eventFailureHistoryRepository.saveFailure(
+            {
+              event,
+              failure: {
+                data: {
+                  type: 'EXCEPTION',
+                  exception: {
+                    kind: exception.kind,
+                    name: exception.name,
+                    details: {}
+                  }
+                },
+                date: Date.now()
+              },
+              handler: eventHandler.listener,
+              state: {
+                attempts: eventHandler.state.failures
+              }
+            }
+          );
+
+        if (addEventFailureHistoryResult.failed())
+          return addEventFailureHistoryResult;
+
+        const updateEventHandlerResult =
+          await ApplicationEventManager.instance._eventHandlerRepository.updateEventHandler(
+            eventHandler.id,
+            {
+              state: {
+                acquiredAt: null,
+                failures: eventHandler.state.failures + 1,
+                lockedAt: Date.now()
+              }
+            }
+          );
+
+        if (updateEventHandlerResult.failed()) return updateEventHandlerResult;
+      }
+    } catch (error) {
+      const addEventFailureHistoryResult =
+        await ApplicationEventManager.instance._eventFailureHistoryRepository.saveFailure(
+          {
+            event,
+            failure: {
+              data: {
+                type: 'THROW',
+                error: util.inspect(error)
+              },
+              date: Date.now()
+            },
+            handler: eventHandler.listener,
+            state: {
+              attempts: eventHandler.state.failures
+            }
+          }
+        );
+
+      if (addEventFailureHistoryResult.failed())
+        return addEventFailureHistoryResult;
+
+      const updateEventHandlerResult =
+        await ApplicationEventManager.instance._eventHandlerRepository.updateEventHandler(
+          eventHandler.id,
+          {
+            state: {
+              acquiredAt: null,
+              failures: eventHandler.state.failures + 1,
+              lockedAt: Date.now()
+            }
+          }
+        );
+
+      if (updateEventHandlerResult.failed()) return updateEventHandlerResult;
+    }
+
+    return Result.done();
   }
 
   public static listener(domain: string): ClassDecorator {
@@ -285,34 +416,95 @@ export class ApplicationEventManager {
     };
   }
 
+  private static _createEventRemove(
+    defaultDomain: string
+  ): <E>(
+    name: string,
+    match: TDeepPartial<E>,
+    eventDomain?: string
+  ) => Promise<TVoidResult> {
+    return async function <E>(
+      name: string,
+      match: TDeepPartial<E>,
+      eventDomain: string = defaultDomain
+    ): Promise<TVoidResult> {
+      const deleteEventResult =
+        await ApplicationEventManager.instance._eventRepository.deleteEvent({
+          emitter: {
+            domain: eventDomain,
+            event: name,
+            type: 'domain'
+          },
+          data: match
+        });
+
+      if (deleteEventResult.failed()) return deleteEventResult;
+
+      const deleteEventHandlersResult =
+        await ApplicationEventManager.instance._eventHandlerRepository.deleteByEvents(
+          deleteEventResult.value()
+        );
+
+      if (deleteEventHandlersResult.failed()) return deleteEventHandlersResult;
+
+      return Result.done();
+    };
+  }
+
+  private static async _handleDelayedEvent(
+    event: IEvent<any>,
+    eventHandler: IEventHandler
+  ): Promise<TVoidResult> {
+    if (!ApplicationEventManager._registry.ready)
+      throw new Error('Handling event before manager is ready');
+
+    const handler = ApplicationEventManager._registry.events[
+      event.emitter.domain
+    ][event.emitter.event].find(
+      (v) =>
+        v.domain === eventHandler.listener.domain &&
+        v.listener === eventHandler.listener.listener
+    );
+
+    if (!handler)
+      return Result.fail(
+        new NoHandlerFoundException({
+          type: 'domain',
+          listener: eventHandler.listener.listener,
+          method: event.emitter.event
+        })
+      );
+
+    const handlerResult = await handler.method({
+      data: event.data,
+      removeEvent: ApplicationEventManager._createEventRemove(
+        event.emitter.domain
+      )
+    });
+
+    if (handlerResult.failed()) return handlerResult;
+
+    const deleteEventHandlerResult =
+      await ApplicationEventManager.instance._eventHandlerRepository.deleteEventHandler(
+        eventHandler.id
+      );
+
+    if (deleteEventHandlerResult.failed()) return deleteEventHandlerResult;
+
+    return Result.done();
+  }
+
   @Container.builder()
   protected async prepare(): Promise<void> {
     const newRegistry: {
       events: {
         [domain: string]: {
-          [event: string]: (
-            | {
-                conditional: true;
-                immediate: false;
-                method: (
-                  event: TConditionalEventOptions<any>
-                ) => Promise<TEventReturn<true>>;
-              }
-            | {
-                conditional: false;
-                immediate: false;
-                method: (
-                  event: TImmediateEventOptions<any>
-                ) => Promise<TEventReturn<false>>;
-              }
-            | {
-                conditional: false;
-                immediate: true;
-                method: (
-                  event: TImmediateEventOptions<any>
-                ) => Promise<TEventReturn<false>>;
-              }
-          )[];
+          [event: string]: {
+            domain: string;
+            immediate: boolean;
+            listener: string;
+            method: (event: TEventOptions<any>) => Promise<TVoidResult>;
+          }[];
         };
       };
       ready: true;
@@ -347,9 +539,10 @@ export class ApplicationEventManager {
               newRegistry.events[domain][event.name] = [];
 
             newRegistry.events[domain][event.name].push({
+              domain: element.domain,
               method: built[event.name].bind(built),
-              conditional: event.conditional as false,
-              immediate: event.immediate as true
+              immediate: event.immediate as true,
+              listener: element.handler.name
             });
           }
 
@@ -372,5 +565,6 @@ export class ApplicationEventManager {
 
     ApplicationEventManager._pending.events.clear();
     ApplicationEventManager._pending.rpc.clear();
+    ApplicationEventManager.__instance = this;
   }
 }

@@ -2,3 +2,6 @@ node_modules
 build
 dist
 .vscode
+notes
+scripts
+utils

@@ -1,7 +1,7 @@
 import { Result } from 'shared';
 import { Container, mongoDriverTokens } from 'components';
 
-import type { MongoDriver } from 'drivers/mongo';
+import type { MongoDriver, UserMapper } from 'drivers/mongo';
 import type { TResult, TVoidResult } from 'shared';
 import type { IUserRepository, UserEntity } from 'app/user';
 
@@ -9,11 +9,13 @@ import type { IUserRepository, UserEntity } from 'app/user';
 export class MongoUserRepository implements IUserRepository {
   public constructor(
     @Container.inject(mongoDriverTokens.driver)
-    private readonly _driver: MongoDriver
+    private readonly _driver: MongoDriver,
+    @Container.inject(mongoDriverTokens.mappers.user)
+    private readonly _userMapper: UserMapper
   ) {}
 
   private get collection() {
-    return this._driver.model('user', 'user');
+    return this._driver.model('domains', 'user', 'user');
   }
 
   public async emailAvailable(email: string): Promise<TResult<boolean>> {
@@ -25,7 +27,18 @@ export class MongoUserRepository implements IUserRepository {
   }
 
   public async save(entity: UserEntity): Promise<TVoidResult> {
-    await this.collection.updateOne({ _id: entity.id }, {});
+    const toPersistanceResult = await this._userMapper.toPersistance(entity);
+
+    if (toPersistanceResult.failed()) return toPersistanceResult;
+
+    const doc = toPersistanceResult.value();
+
+    console.log({ doc });
+    // await this.collection.updateOne(
+    //   { _id: entity.id },
+    //   { $set: doc },
+    //   { upsert: true }
+    // );
 
     return Result.done();
   }

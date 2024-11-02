@@ -2,7 +2,12 @@ import mongodb from 'mongodb';
 import { Container, libraryTokens } from 'components';
 
 import type { IMongoDriverModels } from 'drivers/mongo';
-import type { ConfigParser, IBaseDriver } from 'shared';
+import {
+  Result,
+  type ConfigParser,
+  type IBaseDriver,
+  type TVoidResult
+} from 'shared';
 
 @Container.injectable()
 export class MongoDriver implements IBaseDriver {
@@ -15,39 +20,59 @@ export class MongoDriver implements IBaseDriver {
     this._connections = {};
   }
 
-  public model<
-    D extends keyof IMongoDriverModels,
-    R extends keyof IMongoDriverModels[D]
+  public getCollectionName<
+    T extends keyof IMongoDriverModels,
+    D extends keyof IMongoDriverModels[T],
+    R extends keyof IMongoDriverModels[T][D]
   >(
+    type: T,
     domain: D,
     repo: R
-  ): mongodb.Collection<
-    IMongoDriverModels[D][R] extends mongodb.Document
-      ? IMongoDriverModels[D][R]
-      : never
-  > {
+  ): { collection: string; database: string; instance: string } {
     const instance = Object.entries(
       this._configParser.config.drivers.mongo.connections
-    ).find(
-      (v) =>
-        domain in v[1].domains &&
-        v[1].domains[domain].some((v) => repo in v.collections)
+    ).find((v) =>
+      domain in v[1][type] && Array.isArray(v[1][type][domain])
+        ? v[1][type][domain].some((v) => repo in v.collections)
+        : repo in v[1][type as 'shared'][domain as string].collections
     );
 
     if (!instance)
       throw new Error(
-        `No instance to handle repo ${repo as string} for ${domain}`
+        `No instance to handle repo ${repo as string} for ${type} ${domain as string}`
       );
 
-    const { collections, database } = instance[1].domains[domain].find(
-        (v) => repo in v.collections
-      )!,
+    const { collections, database } = Array.isArray(instance[1][type][domain])
+        ? instance[1][type][domain].find((v) => repo in v.collections)!
+        : instance[1][type][domain],
       collection = collections[repo as keyof typeof collections];
 
-    const connection = this._connections[instance[0]];
+    return { database, collection, instance: instance[0] };
+  }
+
+  public model<
+    T extends keyof IMongoDriverModels,
+    D extends keyof IMongoDriverModels[T],
+    R extends keyof IMongoDriverModels[T][D]
+  >(
+    type: T,
+    domain: D,
+    repo: R
+  ): mongodb.Collection<
+    IMongoDriverModels[T][D][R] extends mongodb.Document
+      ? IMongoDriverModels[T][D][R]
+      : never
+  > {
+    const { instance, collection, database } = this.getCollectionName(
+      type,
+      domain,
+      repo
+    );
+
+    const connection = this._connections[instance];
 
     if (connection === undefined)
-      throw new Error(`No connection found for: ${instance[0]}`);
+      throw new Error(`No connection found for: ${instance}`);
 
     let formattedName = collection.toLowerCase();
 
@@ -56,18 +81,20 @@ export class MongoDriver implements IBaseDriver {
     return connection!.db(database).collection(collection) as any;
   }
 
-  public async startDriver(): Promise<void> {
+  public async startDriver(): Promise<TVoidResult> {
     console.log('debug', 'Starting mongodb driver.', null);
     await this.connect();
-    return;
+    return Result.done();
   }
 
-  public async stopDriver(): Promise<void> {
+  public async stopDriver(): Promise<TVoidResult> {
     for (const connection of Object.values(this._connections)) {
       await connection.close();
     }
 
     this._connections = {};
+
+    return Result.done();
   }
 
   private async connect(): Promise<void> {

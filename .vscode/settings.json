@@ -7,5 +7,6 @@
   "[javascript]": {
     "editor.defaultFormatter": "dbaeumer.vscode-eslint"
   },
-  "discord.enabled": true
+  "discord.enabled": true,
+  "typescript.tsdk": "node_modules/typescript/lib"
 }

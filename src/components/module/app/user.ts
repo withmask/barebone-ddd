@@ -1,6 +1,6 @@
 import { Module, userTokens } from 'components';
-import { CreateUserController, UserFactory } from 'app/user';
 import { MongoUserRepository } from 'drivers/mongo';
+import { CreateUserController, UserFactory } from 'app/user';
 
 export const userDomainModule = Module.create();
 

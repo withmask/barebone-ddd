@@ -11,6 +11,7 @@ export interface IConfig {
       };
     };
   };
+
   drivers: {
     mongo: {
       connections: {
@@ -21,9 +22,21 @@ export interface IConfig {
               database: string;
             }[];
           };
+          shared: {
+            [component: string]: {
+              collections: { [key: string]: string };
+              database: string;
+            };
+          };
           uri: string;
         };
       };
+    };
+  };
+  shared: {
+    eventManager: {
+      eventFailureLockPeriod: number;
+      eventTimeoutPeriod: number;
     };
   };
 }

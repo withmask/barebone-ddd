@@ -11,6 +11,7 @@ export async function resolve(specifier, context, nextResolve) {
 
   let link;
 
+  // console.log(specifier);
   const parent = context.parentURL ? context.parentURL.slice(5) : process.cwd();
 
   if (module.isBuiltin(specifier) || specifier.endsWith('.js'))

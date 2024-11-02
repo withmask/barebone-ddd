@@ -23,7 +23,7 @@ export interface IQueuedHandlerEvent {
   state: {
     attempts: number;
     failed: boolean;
-    lockedUntil: number | null;
+    lockedAt: number | null;
     success: boolean;
   };
 }

@@ -6,6 +6,11 @@ app:
           maxNameLength: 32
           minNameLength: 6
 
+shared:
+  eventManager:
+    eventFailureLockPeriod: 1.8e+6 #30 minutes
+    eventTimeoutPeriod: 120000 #2 minutes
+
 drivers:
   mongo:
     connections:
@@ -22,3 +27,10 @@ drivers:
             - database: secondary
               collections:
                 cards: cards
+        shared:
+          events:
+            database: events #All of the collections need to belong to one database to allow aggregation.
+            collections:
+              eventFailure: event-failure
+              eventHandler: event-handler
+              event: event

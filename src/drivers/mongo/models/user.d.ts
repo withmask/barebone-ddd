@@ -1,9 +1,9 @@
 export interface IUserDocument {
   _id: string;
-  code: string | undefined;
+  // code: string | undefined;
   email: string;
   name: string;
-  password: string;
-  username: string;
-  validated: boolean;
+  // password: string;
+  // username: string;
+  // validated: boolean;
 }

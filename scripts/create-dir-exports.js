@@ -11,13 +11,24 @@ const ignoreDirs = [];
 
 const layers = fs.readdirSync(source);
 
+function fileNameToVariableName(fileName) {
+  const nameWithoutExtension = fileName.replace(/\.[^/.]+$/, '');
+
+  const validIdentifier = nameWithoutExtension
+    .replace(/[^a-zA-Z0-9]+(.)/g, (_, chr) => chr.toUpperCase())
+    .replace(/^[^a-zA-Z]+/, '');
+
+  return validIdentifier;
+}
+
 const extensions = {
   'd.ts': (name) => ({
     ex: `export type * from './${name}.d';`
   }),
   ts: (name) => ({ ex: `export * from './${name}';` }),
   json: (name) => ({
-    ex: `export { default as ${name}Tokens } from './${name}.json' assert { type: 'json' };`
+    im: `import ${fileNameToVariableName(name)} from './${name}.json' with { type: 'json' };`,
+    ex: `export const ${name}Tokens = ${fileNameToVariableName(name)};`
   })
 };
 
