@@ -23,10 +23,6 @@ drivers:
                 user: user
                 sessions: sessions
 
-          cards:
-            - database: secondary
-              collections:
-                cards: cards
         shared:
           events:
             database: events #All of the collections need to belong to one database to allow aggregation.
