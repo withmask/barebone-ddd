@@ -2,12 +2,12 @@ FROM node:lts
 
 WORKDIR /usr/src
 
-COPY package*.json .
+COPY package.json yarn.lock ./
 
-RUN npm install --production
+RUN yarn install --production
 
 COPY . .
 
-RUN npm run build
+RUN yarn run build
 
 ENTRYPOINT [ "node", "build/index.js" ]
