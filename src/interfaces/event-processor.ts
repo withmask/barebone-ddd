@@ -24,7 +24,6 @@ export class EventProcessor implements IInterface {
   }
 
   public async main(): Promise<TVoidResult> {
-    // eslint-disable-next-line no-constant-condition
     while (true) {
       const handleNextEvent = await ApplicationEventManager.handleNextEvent();
 
