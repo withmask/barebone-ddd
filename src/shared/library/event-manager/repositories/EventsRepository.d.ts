@@ -15,10 +15,11 @@ export interface IEvent<D> {
 }
 
 export interface IEventRepository {
+  all(): AsyncGenerator<TResult<IEvent<any>>>;
   deleteEvent(
     event: Omit<IEvent<any>, 'emittedAt' | 'id'>
-  ): Promise<TResult<string[]>>;
+  ): Promise<TVoidResult>;
+  deleteEvents(events: string[]): Promise<TVoidResult>;
   getByID(id: string): Promise<TResult<IEvent<any> | null>>;
-  purgeCompletedEvents(): Promise<TVoidResult>;
   storeEvent(event: IEvent<any>): Promise<TVoidResult>;
 }

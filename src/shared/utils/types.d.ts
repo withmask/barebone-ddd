@@ -35,3 +35,9 @@ export type TRemapID<M extends { id: string }> = Omit<M, 'id'> & {
 type TDeepPartial<T> = {
   [P in keyof T]?: TDeepPartial<T[P]>;
 };
+
+type TypedMethodDecorator<T> = <M extends T>(
+  target: Object,
+  propertyKey: symbol | string,
+  descriptor: TypedPropertyDescriptor<M>
+) => TypedPropertyDescriptor<M> | void;

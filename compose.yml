@@ -1,5 +1,5 @@
 services:
-  event-processor:
+  periodic:
     image: main
     build:
       context: .
@@ -7,10 +7,13 @@ services:
     env_file:
       - .env
     environment:
-      INTERFACE: event-processor
+      INTERFACE: periodic
 
   core:
     image: main
+    build:
+      context: .
+      dockerfile: Dockerfile
     env_file:
       - .env
     environment:

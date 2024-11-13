@@ -1,16 +1,17 @@
 /* eslint-disable max-classes-per-file */
 import type { Module, PrivateClass } from 'components';
+import type { TypedMethodDecorator } from 'shared';
+
+interface ContainerPluginMetadata {
+  data: any;
+  method: (...args: any[]) => any;
+}
 
 export type ContainerListener = (load: (source: Module) => void) => void;
 
 export class Container {
   private static readonly _automatic: Set<new (...args: any[]) => any> =
     new Set();
-
-  private static readonly _builderFunctions: Map<
-    new (...args: any[]) => any,
-    string | symbol
-  > = new Map();
 
   private static readonly _dependencyRegistry: Map<
     new (...args: any[]) => any,
@@ -27,8 +28,35 @@ export class Container {
 
   private static _instance: Container | null = null;
 
+  private static readonly _pluginMetadata: Map<
+    new (...args: any[]) => any,
+    {
+      [pluginToken: string]: {
+        [property: string]: any;
+      };
+    }
+  > = new Map();
+
+  private static readonly _specialFunctions: Map<
+    new (...args: any[]) => any,
+    Map<'builder' | 'interceptor', string>
+  > = new Map();
+
   private readonly _cache: { [key: string]: any };
   private _listener: ContainerListener | null;
+  private readonly _plugins: {
+    methods: {
+      [component: string]: (
+        metadata: any,
+        method: (...args: any[]) => any
+      ) => any;
+    };
+    queue: {
+      methods: {
+        [component: string]: [any, method: (...args: any[]) => any][];
+      };
+    };
+  };
 
   private _ready: boolean;
 
@@ -39,6 +67,12 @@ export class Container {
   private constructor() {
     this._ready = false;
     this._listener = null;
+    this._plugins = {
+      methods: {},
+      queue: {
+        methods: {}
+      }
+    };
     this._cache = Object.create(null);
     this._registry = Object.create(null);
   }
@@ -62,10 +96,15 @@ export class Container {
 
   public static builder(): MethodDecorator {
     return (target: any, prop: string | symbol) => {
-      if (Container._builderFunctions.has(target.constructor))
+      const specialFunctions =
+        Container._specialFunctions.get(target.constructor) || new Map();
+
+      if (specialFunctions.get('builder'))
         throw new Error('A class cannot have multiple builder functions.');
 
-      this._builderFunctions.set(target.constructor, prop);
+      specialFunctions.set('builder', prop);
+
+      this._specialFunctions.set(target.constructor, specialFunctions);
     };
   }
 
@@ -135,36 +174,38 @@ export class Container {
     };
   }
 
-  public async build<T>(element: new (...args: any[]) => T): Promise<T> {
-    const registry: (string | (typeof Container)['_injectContainer'])[] =
-        Container._dependencyRegistry.get(element) || [],
-      args: any[] = [];
+  public static interceptor<
+    M extends ContainerPluginMetadata
+  >(): TypedMethodDecorator<(meta: M['data'], method: M['method']) => void> {
+    return (target: any, prop: string | symbol) => {
+      const specialFunctions =
+        Container._specialFunctions.get(target.constructor) || new Map();
 
-    for (const componentDependency of registry) {
-      if (typeof componentDependency === 'symbol') {
-        if (componentDependency === Container._injectContainer) args.push(this);
-      } else
-        args.push(await this._get(componentDependency, Object.create(null)));
-    }
+      if (specialFunctions.get('interceptor'))
+        throw new Error('A class cannot have multiple builder functions.');
 
-    if (args.length !== element.length)
-      throw new Error(
-        `Component ${element.name} takes ${element.length} dependencies but only ${args.length} were passed.`
-      );
+      specialFunctions.set('interceptor', prop);
 
-    const built = new element(...args);
+      this._specialFunctions.set(target.constructor, specialFunctions);
+    };
+  }
 
-    const builderMethod = Container._builderFunctions.get(element);
+  public static plugin<M extends ContainerPluginMetadata>(
+    token: string,
+    data: M['data']
+  ): TypedMethodDecorator<M['method']> {
+    return (target: any, prop) => {
+      const pluginMetadata = this._pluginMetadata.get(target.constructor) || {};
 
-    if (typeof builderMethod === 'string') {
-      await (built as any)[builderMethod].call(built);
+      if (!(token in pluginMetadata)) pluginMetadata[token] = {};
+      pluginMetadata[token][prop as string] = data;
 
-      Container._builderFunctions.delete(element);
-    }
+      this._pluginMetadata.set(target.constructor, pluginMetadata);
+    };
+  }
 
-    Container._dependencyRegistry.delete(element);
-
-    return built;
+  public build<T>(element: new (...args: any[]) => T): Promise<T> {
+    return this._build(element);
   }
 
   public async get<T>(component: string): Promise<T> {
@@ -203,9 +244,98 @@ export class Container {
     for (const componentID in this._registry) {
       if (Object.prototype.hasOwnProperty.call(this._registry, componentID)) {
         const component = this._registry[componentID];
+
         if (component.cached) await this.get(componentID);
       }
     }
+  }
+
+  private async _build(
+    element: new (...args: any) => any,
+    parents: { [key: string]: 0 } = {},
+    component?: string
+  ): Promise<any> {
+    const registry: (string | (typeof Container)['_injectContainer'])[] =
+        Container._dependencyRegistry.get(element) || [],
+      id = component || element.name,
+      args: any[] = [];
+
+    for (const componentDependency of registry) {
+      if (componentDependency === id)
+        throw new Error('Circular self-dependency.');
+
+      if (componentDependency in parents)
+        throw new Error('Circular dependency.');
+
+      if (typeof componentDependency === 'symbol') {
+        if (componentDependency === Container._injectContainer) args.push(this);
+      } else
+        args.push(
+          await this._get(componentDependency, {
+            ...parents,
+            [id]: 0
+          })
+        );
+    }
+
+    if (args.length !== element.length)
+      throw new Error(
+        `Component ${id} takes ${element.length} dependencies but only ${args.length} were passed.`
+      );
+
+    const built = new element(...args);
+
+    Container._dependencyRegistry.delete(element);
+
+    const specialMethods = Container._specialFunctions.get(element);
+    const builderMethod = specialMethods?.get('builder');
+    const interceptorMethod = specialMethods?.get('interceptor');
+    if (typeof builderMethod === 'string')
+      await (built as any)[builderMethod].call(built);
+
+    if (typeof interceptorMethod === 'string') {
+      if (component === undefined)
+        throw new Error(
+          `Manually built component ${id} cannot have interceptor method ${interceptorMethod}.`
+        );
+
+      this._plugins.methods[id] = (built as any)[interceptorMethod].bind(built);
+
+      if (id in this._plugins.queue.methods) {
+        for (const pending of this._plugins.queue.methods[id]) {
+          this._plugins.methods[id](...pending);
+        }
+        delete this._plugins.queue.methods[id];
+      }
+    }
+
+    Container._specialFunctions.delete(element);
+
+    const pluginMetadataRegistry = Container._pluginMetadata.get(element);
+
+    if (pluginMetadataRegistry) {
+      for (const plugin of Object.keys(pluginMetadataRegistry)) {
+        const propertiesWithMetadata = pluginMetadataRegistry[plugin];
+
+        for (const prop of Object.keys(propertiesWithMetadata)) {
+          const metadata = propertiesWithMetadata[prop];
+
+          if (plugin in this._plugins.methods)
+            this._plugins.methods[plugin](metadata, built[prop].bind(built));
+          else {
+            if (!(plugin in this._plugins.queue.methods))
+              this._plugins.queue.methods[plugin] = [];
+
+            this._plugins.queue.methods[plugin].push([
+              metadata,
+              built[prop].bind(built)
+            ]);
+          }
+        }
+      }
+    }
+
+    return built;
   }
 
   private async _get(
@@ -217,46 +347,13 @@ export class Container {
     if (!(component in this._registry))
       throw new Error(`Cannot find component with id: ${component}`);
 
-    const element = this._registry[component],
-      registry: (string | (typeof Container)['_injectContainer'])[] =
-        Container._dependencyRegistry.get(element.component) || [],
-      args: any[] = [];
+    const element = this._registry[component];
 
-    for (const componentDependency of registry) {
-      if (componentDependency === component)
-        throw new Error('Circular self-dependency.');
-
-      if (componentDependency in parents)
-        throw new Error('Circular dependency.');
-
-      if (typeof componentDependency === 'symbol') {
-        if (componentDependency === Container._injectContainer) args.push(this);
-      } else
-        args.push(
-          await this._get(componentDependency, { ...parents, [component]: 0 })
-        );
-    }
-
-    if (args.length !== element.component.length)
-      throw new Error(
-        `Component ${component} takes ${element.component.length} dependencies but only ${args.length} were passed.`
-      );
-
-    const built = new element.component(...args);
+    const built = await this._build(element.component, parents, component);
 
     this._cache[component] = built;
 
     delete this._registry[component];
-
-    Container._dependencyRegistry.delete(element.component);
-
-    const builderMethod = Container._builderFunctions.get(element.component);
-
-    if (typeof builderMethod === 'string') {
-      await built[builderMethod].call(built);
-
-      Container._builderFunctions.delete(element.component);
-    }
 
     return built;
   }

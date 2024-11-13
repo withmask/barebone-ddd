@@ -1,3 +1,3 @@
 export * from './api';
 
-export * from './event-processor';
+export * from './periodic-worker';

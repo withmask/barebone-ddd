@@ -1,7 +1,13 @@
 import util from 'util';
-import { Container, eventsManagerTokens, pluginsTokens } from 'components';
+import {
+  Container,
+  eventsManagerTokens,
+  libraryTokens,
+  pluginsTokens
+} from 'components';
 
 import {
+  Exception,
   getApplicationCaller,
   NoHandlerForRPCCommandException,
   NoHandlerFoundException,
@@ -11,10 +17,12 @@ import {
 import type {
   CryptoPlugin,
   IEvent,
+  IEventFailureHistory,
   IEventFailureHistoryRepository,
   IEventHandler,
   IEventHandlerRepository,
   IEventRepository,
+  PeriodicManagerPluginData,
   TDeepPartial,
   TResult,
   TVoidResult
@@ -247,125 +255,6 @@ export class ApplicationEventManager {
     };
   }
 
-  public static async handleNextEvent(): Promise<TVoidResult> {
-    const eventHandlerResult =
-      await ApplicationEventManager.instance._eventHandlerRepository.getNextEventHandler();
-
-    if (eventHandlerResult.failed()) return eventHandlerResult;
-
-    const eventHandler = eventHandlerResult.value();
-
-    if (eventHandler === null) {
-      // console.log('No events to handle.');
-      return Result.done();
-    }
-
-    const eventResult =
-      await ApplicationEventManager.instance._eventRepository.getByID(
-        eventHandler.event
-      );
-
-    if (eventResult.failed()) return eventResult;
-
-    const event = eventResult.value();
-
-    if (event === null) {
-      console.log(`Can't find event: ${eventHandler.event}`);
-      const deleteEventHandlerResult =
-        await ApplicationEventManager.instance._eventHandlerRepository.deleteByEvents(
-          [eventHandler.event]
-        );
-
-      if (deleteEventHandlerResult.failed()) return deleteEventHandlerResult;
-
-      return Result.done();
-    }
-
-    try {
-      const handleEventResult =
-        await ApplicationEventManager._handleDelayedEvent(event, eventHandler);
-
-      if (handleEventResult.failed()) {
-        const exception = handleEventResult.error();
-        const addEventFailureHistoryResult =
-          await ApplicationEventManager.instance._eventFailureHistoryRepository.saveFailure(
-            {
-              event,
-              failure: {
-                data: {
-                  type: 'EXCEPTION',
-                  exception: {
-                    kind: exception.kind,
-                    name: exception.name,
-                    details: {}
-                  }
-                },
-                date: Date.now()
-              },
-              handler: eventHandler.listener,
-              state: {
-                attempts: eventHandler.state.failures
-              }
-            }
-          );
-
-        if (addEventFailureHistoryResult.failed())
-          return addEventFailureHistoryResult;
-
-        const updateEventHandlerResult =
-          await ApplicationEventManager.instance._eventHandlerRepository.updateEventHandler(
-            eventHandler.id,
-            {
-              state: {
-                acquiredAt: null,
-                failures: eventHandler.state.failures + 1,
-                lockedAt: Date.now()
-              }
-            }
-          );
-
-        if (updateEventHandlerResult.failed()) return updateEventHandlerResult;
-      }
-    } catch (error) {
-      const addEventFailureHistoryResult =
-        await ApplicationEventManager.instance._eventFailureHistoryRepository.saveFailure(
-          {
-            event,
-            failure: {
-              data: {
-                type: 'THROW',
-                error: util.inspect(error)
-              },
-              date: Date.now()
-            },
-            handler: eventHandler.listener,
-            state: {
-              attempts: eventHandler.state.failures
-            }
-          }
-        );
-
-      if (addEventFailureHistoryResult.failed())
-        return addEventFailureHistoryResult;
-
-      const updateEventHandlerResult =
-        await ApplicationEventManager.instance._eventHandlerRepository.updateEventHandler(
-          eventHandler.id,
-          {
-            state: {
-              acquiredAt: null,
-              failures: eventHandler.state.failures + 1,
-              lockedAt: Date.now()
-            }
-          }
-        );
-
-      if (updateEventHandlerResult.failed()) return updateEventHandlerResult;
-    }
-
-    return Result.done();
-  }
-
   public static listener(domain: string): ClassDecorator {
     return (target: any) => {
       const { domain: listener } = getApplicationCaller();
@@ -440,56 +329,94 @@ export class ApplicationEventManager {
 
       if (deleteEventResult.failed()) return deleteEventResult;
 
-      const deleteEventHandlersResult =
-        await ApplicationEventManager.instance._eventHandlerRepository.deleteByEvents(
-          deleteEventResult.value()
-        );
-
-      if (deleteEventHandlersResult.failed()) return deleteEventHandlersResult;
-
       return Result.done();
     };
   }
 
-  private static async _handleDelayedEvent(
-    event: IEvent<any>,
-    eventHandler: IEventHandler
-  ): Promise<TVoidResult> {
-    if (!ApplicationEventManager._registry.ready)
-      throw new Error('Handling event before manager is ready');
+  @Container.plugin<PeriodicManagerPluginData>(libraryTokens.periodicManager, {
+    operation: 'Handle delayed domain events.',
+    sleep: null
+  })
+  protected async handleNextEvent(): Promise<TVoidResult> {
+    const eventHandlerResult =
+      await this._eventHandlerRepository.getNextEventHandler();
 
-    const handler = ApplicationEventManager._registry.events[
-      event.emitter.domain
-    ][event.emitter.event].find(
-      (v) =>
-        v.domain === eventHandler.listener.domain &&
-        v.listener === eventHandler.listener.listener
-    );
+    if (eventHandlerResult.failed()) return eventHandlerResult;
 
-    if (!handler)
-      return Result.fail(
-        new NoHandlerFoundException({
-          type: 'domain',
-          listener: eventHandler.listener.listener,
-          method: event.emitter.event
-        })
+    const eventHandler = eventHandlerResult.value();
+
+    if (eventHandler === null) {
+      return Result.done();
+    }
+
+    const eventResult = await this._eventRepository.getByID(eventHandler.event);
+
+    if (eventResult.failed()) return eventResult;
+
+    const event = eventResult.value();
+
+    if (event === null) {
+      const deleteEventHandlerResult =
+        await this._eventHandlerRepository.dl([eventHandler.event]);
+
+      if (deleteEventHandlerResult.failed()) return deleteEventHandlerResult;
+
+      return Result.done();
+    }
+
+    try {
+      const handleEventResult = await this._handleDelayedEvent(
+        event,
+        eventHandler
       );
 
-    const handlerResult = await handler.method({
-      data: event.data,
-      removeEvent: ApplicationEventManager._createEventRemove(
-        event.emitter.domain
-      )
-    });
+      if (handleEventResult.failed()) throw handleEventResult.error();
+    } catch (error) {
+      let failure: IEventFailureHistory['failure']['data'];
 
-    if (handlerResult.failed()) return handlerResult;
+      if (error instanceof Exception) {
+        failure = {
+          type: 'EXCEPTION',
+          exception: {
+            kind: error.kind,
+            name: error.name,
+            details: error.toJSON()
+          }
+        };
+      } else {
+        failure = {
+          type: 'THROW',
+          error: util.inspect(error)
+        };
+      }
 
-    const deleteEventHandlerResult =
-      await ApplicationEventManager.instance._eventHandlerRepository.deleteEventHandler(
-        eventHandler.id
-      );
+      const addEventFailureHistoryResult =
+        await this._eventFailureHistoryRepository.saveFailure({
+          event,
+          failure: {
+            data: failure,
+            date: Date.now()
+          },
+          handler: eventHandler.listener,
+          state: {
+            attempts: eventHandler.state.failures
+          }
+        });
 
-    if (deleteEventHandlerResult.failed()) return deleteEventHandlerResult;
+      if (addEventFailureHistoryResult.failed())
+        return addEventFailureHistoryResult;
+
+      const updateEventHandlerResult =
+        await this._eventHandlerRepository.updateEventHandler(eventHandler.id, {
+          state: {
+            acquiredAt: null,
+            failures: eventHandler.state.failures + 1,
+            lockedAt: Date.now()
+          }
+        });
+
+      if (updateEventHandlerResult.failed()) return updateEventHandlerResult;
+    }
 
     return Result.done();
   }
@@ -566,5 +493,86 @@ export class ApplicationEventManager {
     ApplicationEventManager._pending.events.clear();
     ApplicationEventManager._pending.rpc.clear();
     ApplicationEventManager.__instance = this;
+  }
+
+  @Container.plugin<PeriodicManagerPluginData>(libraryTokens.periodicManager, {
+    operation: `Purge events with no handlers`,
+    sleep: 10 * 60 * 1000
+  })
+  protected async purgeFinishedEvents(): Promise<TVoidResult> {
+    let ids: string[] = [];
+
+    for await (const eventResult of this._eventRepository.all()) {
+      if (eventResult.failed()) return eventResult;
+
+      const event = eventResult.value();
+
+      const countResult = await this._eventHandlerRepository.countByEvent(
+        event.id
+      );
+
+      if (countResult.failed()) return countResult;
+
+      const count = countResult.value();
+
+      if (count === 0) ids.push(event.id);
+
+      if (ids.length === 100) {
+        const deleteManyResult = await this._eventRepository.deleteEvents(ids);
+
+        if (deleteManyResult.failed()) return deleteManyResult;
+
+        ids = [];
+      }
+    }
+
+    if (ids.length) {
+      const deleteManyResult = await this._eventRepository.deleteEvents(ids);
+
+      if (deleteManyResult.failed()) return deleteManyResult;
+    }
+
+    return Result.done();
+  }
+
+  private async _handleDelayedEvent(
+    event: IEvent<any>,
+    eventHandler: IEventHandler
+  ): Promise<TVoidResult> {
+    if (!ApplicationEventManager._registry.ready)
+      throw new Error('Handling event before manager is ready');
+
+    const handler = ApplicationEventManager._registry.events[
+      event.emitter.domain
+    ][event.emitter.event].find(
+      (v) =>
+        v.domain === eventHandler.listener.domain &&
+        v.listener === eventHandler.listener.listener
+    );
+
+    if (!handler)
+      return Result.fail(
+        new NoHandlerFoundException({
+          type: 'domain',
+          listener: eventHandler.listener.listener,
+          method: event.emitter.event
+        })
+      );
+
+    const handlerResult = await handler.method({
+      data: event.data,
+      removeEvent: ApplicationEventManager._createEventRemove(
+        event.emitter.domain
+      )
+    });
+
+    if (handlerResult.failed()) return handlerResult;
+
+    const deleteEventHandlerResult =
+      await this._eventHandlerRepository.deleteEventHandler(eventHandler.id);
+
+    if (deleteEventHandlerResult.failed()) return deleteEventHandlerResult;
+
+    return Result.done();
   }
 }

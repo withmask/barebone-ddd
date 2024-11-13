@@ -23,6 +23,7 @@ export interface IEventHandler {
 
 export interface IEventHandlerRepository {
   addEventHandler(handler: IEventHandler): Promise<TVoidResult>;
+  countByEvent(id: string): Promise<TResult<number>>;
   deleteByEvents(ids: string[]): Promise<TVoidResult>;
   deleteEventHandler(id: string): Promise<TVoidResult>;
   getNextEventHandler(): Promise<TResult<IEventHandler | null>>;

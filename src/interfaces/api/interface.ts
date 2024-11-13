@@ -20,7 +20,6 @@ export class APIInterface implements IInterface {
   }
 
   public async main(): Promise<TVoidResult> {
-    console.log({ main: '' });
     return Result.done();
   }
 }

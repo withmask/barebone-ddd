@@ -9,22 +9,11 @@ export class UserSubscribers {
   public async userCreated(
     event: TEventOptions<IUserCreatedEvent>
   ): Promise<TVoidResult> {
+    await event.removeEvent<IUserCreatedEvent>('userCreated', {
+      id: event.data.id
+    });
     console.log({ event });
 
     return Result.done();
   }
-
-  // @ApplicationEventManager.event({ immediate: true })
-  // public async userDeleted(
-  //   event: TEventOptions<IUserDeletedEvent>
-  // ): Promise<TVoidResult> {
-  //   const removeEventResult = await event.removeEvent<IUserCreatedEvent>(
-  //     'userCreated',
-  //     { id: event.data.user }
-  //   );
-
-  //   if (removeEventResult.failed()) return removeEventResult;
-
-  //   return Result.done();
-  // }
 }

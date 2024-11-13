@@ -1,16 +1,17 @@
-import { container, mongoDriverTokens, userTokens } from 'components';
-import type { IInterface } from 'shared';
-import { EventProcessor } from 'interfaces';
 import 'loadDomains';
-import type { CreateUserController } from 'app/user';
+import { container, mongoDriverTokens, userTokens } from 'components';
+import { PeriodicWorker } from 'interfaces';
+
+import type { IInterface } from 'shared';
 import type { MongoDriver } from 'drivers/mongo';
+import type { CreateUserController } from 'app/user';
 
 await container.load();
 let selectedInterface: IInterface;
 
 switch (process.env.INTERFACE) {
-  case 'event-processor': {
-    selectedInterface = await container.build(EventProcessor);
+  case 'periodic': {
+    selectedInterface = await container.build(PeriodicWorker);
     break;
   }
 
@@ -18,9 +19,9 @@ switch (process.env.INTERFACE) {
     {
       const driver = await container.get<MongoDriver>(mongoDriverTokens.driver);
 
-      const y = await driver.startDriver();
+      const startDriver = await driver.startDriver();
 
-      console.log(y.lazy());
+      startDriver.lazy();
 
       const userController = await container.get<CreateUserController>(
         userTokens.controllers.createUserController

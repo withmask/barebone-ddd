@@ -13,7 +13,10 @@ export class Module {
   private _ready: boolean;
 
   private _registry: {
-    [key: string]: { cached: boolean; component: PrivateClass };
+    [key: string]: {
+      cached: boolean;
+      component: PrivateClass;
+    };
   };
 
   private constructor() {
@@ -39,7 +42,10 @@ export class Module {
   }
 
   protected __export(): {
-    [key: string]: { cached: boolean; component: PrivateClass };
+    [key: string]: {
+      cached: boolean;
+      component: PrivateClass;
+    };
   } {
     const copy = Object.assign(
       Object.create(null) as {
@@ -76,17 +82,15 @@ export class Module {
     let toCalled = false;
     let cached = false;
 
-    process.nextTick(() => {
-      if (!toCalled && !cached)
-        throw new Error('Next call after .bind should be .to or .cached');
-    });
-
     const binding: Binding = {
       to<T>(component: new (...args: any[]) => T): void {
         if (!Container['_injectableRegistry'].has(component))
           throw new Error(
             `Tried to bind token (${id}) to a non-injectable class ${component.name}.`
           );
+
+        if (toCalled)
+          throw new Error(`Tried to bind token (${id}) multiple times.`);
 
         toCalled = true;
 
@@ -95,15 +99,10 @@ export class Module {
       cached(): Binding {
         if (cached)
           throw new Error(
-            'Tried to declare component as cached multiple times.'
+            `Tried to declare component (${id}) as cached multiple times.`
           );
 
         cached = true;
-
-        process.nextTick(() => {
-          if (!toCalled)
-            throw new Error('Next call after .cached should be .to');
-        });
 
         return binding;
       }

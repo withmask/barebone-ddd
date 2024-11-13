@@ -33,6 +33,14 @@ export class MongoEventHandlerRepository implements IEventHandlerRepository {
     return Result.done();
   }
 
+  public async countByEvent(id: string): Promise<TResult<number>> {
+    let count = await this.collection.countDocuments({
+      event: id
+    });
+
+    return Result.ok(count);
+  }
+
   public async deleteByEvents(ids: string[]): Promise<TVoidResult> {
     await this.collection.deleteMany({
       event: {

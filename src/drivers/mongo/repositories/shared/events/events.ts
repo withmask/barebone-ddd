@@ -21,22 +21,47 @@ export class MongoEventRepository implements IEventRepository {
     return this._mongoDriver.model('shared', 'events', 'event');
   }
 
+  public async *all(): AsyncGenerator<TResult<IEvent<any>>> {
+    for await (const event of this.collection.find()) {
+      const { _id: id, ...e } = event;
+      yield Result.ok({ ...e, id });
+    }
+  }
+
   public async deleteEvent(
     event: TDeepPartial<Omit<IEvent<any>, 'emittedAt' | 'id'>>
-  ): Promise<TResult<string[]>> {
+  ): Promise<TVoidResult> {
     const result = this.collection
       .find(flattenMatch(event))
       .project({ _id: 1 });
 
-    const ids: string[] = [];
+    let ids: string[] = [];
 
     for await (const document of result) {
       ids.push(document._id);
+
+      if (ids.length === 100) {
+        const deleteManyResult = await this.deleteEvents(ids);
+
+        if (deleteManyResult.failed()) return deleteManyResult;
+
+        ids = [];
+      }
     }
 
-    await this.collection.deleteMany({ _id: { $in: ids } });
+    if (ids.length) {
+      const deleteManyResult = await this.deleteEvents(ids);
 
-    return Result.ok(ids);
+      if (deleteManyResult.failed()) return deleteManyResult;
+    }
+
+    return Result.done();
+  }
+
+  public async deleteEvents(events: string[]): Promise<TVoidResult> {
+    await this.collection.deleteMany({ _id: { $in: events } });
+
+    return Result.done();
   }
 
   public async getByID(id: string): Promise<TResult<IEvent<any> | null>> {
@@ -47,56 +72,6 @@ export class MongoEventRepository implements IEventRepository {
     const { _id, ...toReturn } = document;
 
     return Result.ok({ id, ...toReturn });
-  }
-
-  public async purgeCompletedEvents(): Promise<TVoidResult> {
-    const { collection } = this._mongoDriver.getCollectionName(
-      'shared',
-      'events',
-      'eventHandler'
-    );
-
-    let queue: string[] = [];
-
-    for await (const doc of this.collection.aggregate<{ _id: string }>([
-      {
-        $lookup: {
-          from: collection,
-          localField: '_id',
-          foreignField: 'event',
-          as: 'handlers'
-        }
-      },
-      {
-        $match: {
-          handlers: {
-            $size: 0
-          }
-        }
-      },
-      {
-        $project: {
-          _id: 1
-        }
-      }
-    ])) {
-      queue.push(doc._id);
-      if (queue.length > 100) {
-        await this.collection.deleteMany({
-          _id: { $in: queue }
-        });
-
-        queue = [];
-      }
-    }
-
-    if (queue.length > 0) {
-      await this.collection.deleteMany({
-        _id: { $in: queue }
-      });
-    }
-
-    return Result.done();
   }
 
   public async storeEvent(event: IEvent<any>): Promise<TVoidResult> {

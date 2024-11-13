@@ -33,12 +33,11 @@ export class MongoUserRepository implements IUserRepository {
 
     const doc = toPersistanceResult.value();
 
-    console.log({ doc });
-    // await this.collection.updateOne(
-    //   { _id: entity.id },
-    //   { $set: doc },
-    //   { upsert: true }
-    // );
+    await this.collection.updateOne(
+      { _id: entity.id },
+      { $set: doc },
+      { upsert: true }
+    );
 
     return Result.done();
   }

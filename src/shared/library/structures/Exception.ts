@@ -27,7 +27,7 @@ export class Exception<Kind extends TExceptionKind> {
     const result: { [key: string]: any } = {};
 
     for (const prop in this) {
-      if (prop === 'name' && prop === 'kind') continue;
+      if (prop === 'name' || prop === 'kind') continue;
       if (Object.prototype.hasOwnProperty.call(this, prop)) {
         const value = this[prop];
 
