@@ -59,7 +59,10 @@ export class MongoEventHandlerRepository implements IEventHandlerRepository {
     return Result.done();
   }
 
-  public async getNextEventHandler(): Promise<TResult<IEventHandler | null>> {
+  public async getNextEventHandler<T extends 'local' | 'external'>(
+    type: T,
+    listener?: IEventHandler<T>['listener']
+  ): Promise<TResult<IEventHandler<T> | null>> {
     await this.collection.bulkWrite([
       {
         updateMany: {
@@ -99,7 +102,9 @@ export class MongoEventHandlerRepository implements IEventHandlerRepository {
     const nextHandler = await this.collection.findOneAndUpdate(
       {
         'state.acquiredAt': null,
-        'state.lockedAt': null
+        'state.lockedAt': null,
+        'state.type': { $eq: type },
+        $and: [listener === undefined ? {} : flattenMatch(listener, 'listener')]
       },
       {
         $set: {
@@ -117,7 +122,7 @@ export class MongoEventHandlerRepository implements IEventHandlerRepository {
 
     const { _id: id, ...handler } = nextHandler;
 
-    return Result.ok({
+    return Result.ok<any>({
       id,
       ...handler
     });

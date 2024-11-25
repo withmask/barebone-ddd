@@ -7,9 +7,9 @@ export interface IEventFailureHistory {
     emittedAt: number;
 
     emitter: {
-      domain: string;
       event: string;
-      type: 'domain';
+      name: string;
+      type: 'domain' | 'service';
     };
 
     id: string;
@@ -30,9 +30,9 @@ export interface IEventFailureHistory {
   };
 
   handler: {
-    domain: string;
     listener: string;
-    type: 'domain';
+    name: string;
+    type: 'interface' | 'domain' | 'service';
   };
 
   state: {

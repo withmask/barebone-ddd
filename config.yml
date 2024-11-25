@@ -25,8 +25,8 @@ drivers:
 
         shared:
           events:
-            database: events #All of the collections need to belong to one database to allow aggregation.
-            collections:
-              eventFailure: event-failure
-              eventHandler: event-handler
-              event: event
+            - database: events
+              collections:
+                eventFailure: event-failure
+                eventHandler: event-handler
+                event: event

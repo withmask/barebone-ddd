@@ -5,7 +5,7 @@ export class NoHandlerFoundException extends Exception<'internal'> {
     public readonly handler: {
       listener: string;
       method: string;
-      type: 'domain';
+      type: 'interface' | 'domain' | 'service';
     }
   ) {
     super('internal');

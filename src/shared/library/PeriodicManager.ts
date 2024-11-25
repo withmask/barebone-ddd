@@ -2,11 +2,9 @@ import { Container } from 'components';
 import type { TVoidResult } from 'shared';
 
 export interface PeriodicManagerPluginData {
-  data: {
-    operation: string;
-    sleep: number | null;
-  };
   method: () => Promise<TVoidResult>;
+  operation: string;
+  sleep: number | null;
 }
 
 @Container.injectable()
@@ -22,10 +20,9 @@ export class PeriodicManager {
 
   @Container.interceptor<PeriodicManagerPluginData>()
   protected async interceptor(
-    meta: PeriodicManagerPluginData['data'],
-    method: PeriodicManagerPluginData['method']
+    options: PeriodicManagerPluginData
   ): Promise<void> {
-    this._registry.push({ data: meta, method });
+    this._registry.push(options);
   }
 
   public hasFailed(): boolean {
@@ -34,7 +31,7 @@ export class PeriodicManager {
 
   public startJobs(): void {
     for (const job of this._registry) {
-      void this._handleJob(job.data.sleep, job.data.operation, job.method);
+      void this._handleJob(job.sleep, job.operation, job.method);
     }
   }
 

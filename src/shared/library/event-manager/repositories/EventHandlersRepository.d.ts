@@ -1,6 +1,8 @@
 import type { TDeepPartial, TResult, TVoidResult } from 'shared';
 
-export interface IEventHandler {
+export interface IEventHandler<
+  T extends 'local' | 'external' = 'local' | 'external'
+> {
   createdAt: number;
 
   event: string;
@@ -8,9 +10,9 @@ export interface IEventHandler {
   id: string;
 
   listener: {
-    domain: string;
     listener: string;
-    type: 'domain';
+    name: string;
+    type: 'interface' | 'domain' | 'service';
   };
 
   state: {
@@ -18,6 +20,7 @@ export interface IEventHandler {
 
     failures: number;
     lockedAt: number | null;
+    type: T;
   };
 }
 
@@ -26,7 +29,10 @@ export interface IEventHandlerRepository {
   countByEvent(id: string): Promise<TResult<number>>;
   deleteByEvents(ids: string[]): Promise<TVoidResult>;
   deleteEventHandler(id: string): Promise<TVoidResult>;
-  getNextEventHandler(): Promise<TResult<IEventHandler | null>>;
+  getNextEventHandler<T extends 'local' | 'external'>(
+    type: T,
+    listener?: IEventHandler<'external'>['listener']
+  ): Promise<TResult<IEventHandler<T> | null>>;
   updateEventHandler(
     id: string,
     handler: TDeepPartial<Omit<IEventHandler, 'id'>>

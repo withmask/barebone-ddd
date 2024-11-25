@@ -39,7 +39,10 @@ for (const layer of layers) {
   if (stat.isDirectory())
     processDir(
       fullLayer,
-      layer === 'interface' || layer === 'app' || layer === 'drivers'
+      layer === 'interface' ||
+        layer === 'app' ||
+        layer === 'drivers' ||
+        layer === 'services'
     );
 }
 

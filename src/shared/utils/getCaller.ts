@@ -2,29 +2,10 @@ import path from 'path';
 import { constants } from '@constants';
 
 export interface TApplicationCaller {
-  domain: string;
-  //Needed sometimes
+  name: string;
   relativePath: string;
-  type: 'domain';
+  type: 'domain' | 'service' | 'interface';
 }
-// | {
-//     service: string;
-//     type: 'service';
-//   };
-
-// export function getCallerPath(): string {
-//   const originalPrepareStackTrace = Error.prepareStackTrace;
-
-//   Error.prepareStackTrace = (_, stack): NodeJS.CallSite[] => stack;
-//   const err = new Error();
-//   const stack = err.stack as unknown as NodeJS.CallSite[];
-
-//   Error.prepareStackTrace = originalPrepareStackTrace;
-
-//   const target = stack[2]!;
-
-//   return target.getFileName()!;
-// }
 
 export function getApplicationCaller(): TApplicationCaller {
   const originalPrepareStackTrace = Error.prepareStackTrace;
@@ -45,13 +26,36 @@ export function getApplicationCaller(): TApplicationCaller {
 
     return {
       type: 'domain',
-      domain,
+      name: domain,
       relativePath
     };
   }
 
-  // if (target.includes('/services/')) {
-  // }
+  if (target.includes('/services/')) {
+    const [, service]: string[] = target.match(/services\/([^/]+)\//)!;
+
+    const serviceRoot = path.join(constants.root, 'services', service),
+      relativePath = path.relative(serviceRoot, target);
+
+    return {
+      type: 'service',
+      name: service,
+      relativePath
+    };
+  }
+
+  if (target.includes('/interfaces/')) {
+    const [, interfaceName]: string[] = target.match(/interfaces\/([^/]+)\//)!;
+
+    const serviceRoot = path.join(constants.root, 'interface', interfaceName),
+      relativePath = path.relative(serviceRoot, target);
+
+    return {
+      type: 'interface',
+      name: interfaceName,
+      relativePath
+    };
+  }
 
   throw new Error('Caller is not an application caller.');
 }

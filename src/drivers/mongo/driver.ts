@@ -31,11 +31,7 @@ export class MongoDriver implements IBaseDriver {
   ): { collection: string; database: string; instance: string } {
     const instance = Object.entries(
       this._configParser.config.drivers.mongo.connections
-    ).find((v) =>
-      domain in v[1][type] && Array.isArray(v[1][type][domain])
-        ? v[1][type][domain].some((v) => repo in v.collections)
-        : repo in v[1][type as 'shared'][domain as string].collections
-    );
+    ).find((v) => v[1][type][domain].some((v) => repo in v.collections));
 
     if (!instance)
       throw new Error(

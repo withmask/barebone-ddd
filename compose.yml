@@ -1,13 +1,13 @@
 services:
-  periodic:
-    image: main
-    build:
-      context: .
-      dockerfile: Dockerfile
-    env_file:
-      - .env
-    environment:
-      INTERFACE: periodic
+  # periodic:
+  #   image: main
+  #   build:
+  #     context: .
+  #     dockerfile: Dockerfile
+  #   env_file:
+  #     - .env
+  #   environment:
+  #     INTERFACE: periodic
 
   core:
     image: main

@@ -16,6 +16,7 @@
     "strictFunctionTypes": true,
     "sourceMap": false,
     "strictNullChecks": true,
+    "useDefineForClassFields": false,
     "allowUnreachableCode": false,
     "strictPropertyInitialization": true,
     "strictBindCallApply": true,

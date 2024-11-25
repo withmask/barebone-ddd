@@ -14,10 +14,12 @@ import type {
   UserFactory
 } from 'app/user';
 
-import type { TResult } from 'shared';
+import type { TGetNextEvent, TResult } from 'shared';
 
 @Container.injectable()
 export class CreateUserController {
+  private _eventEmitter!: TGetNextEvent<IUserCreatedEvent>;
+
   public constructor(
     @Container.inject(userTokens.factories.userFactory)
     private readonly _userFactory: UserFactory,
@@ -28,6 +30,15 @@ export class CreateUserController {
   public async execute(
     options: ICreateUserControllerOptions
   ): Promise<TResult<ICreateUserControllerDTO>> {
+    const getNextEventResult = await this._eventEmitter.next();
+
+    if (getNextEventResult.failed()) return getNextEventResult;
+
+    if (getNextEventResult.void()) console.log('NO EVENT');
+    else console.log(getNextEventResult.value());
+
+    process.exit(1) as null;
+
     const validateDTOResult =
       Validator.validateDTO<ICreateUserControllerOptions>(options).valueObjects(
         {
@@ -89,9 +100,9 @@ export class CreateUserController {
 
     const user = createNewOneResult.value();
 
-    const saveUserResult = await this._userRepository.save(user);
+    // const saveUserResult = await this._userRepository.save(user);
 
-    if (saveUserResult.failed()) return saveUserResult;
+    // if (saveUserResult.failed()) return saveUserResult;
 
     const emitEventResult =
       await ApplicationEventManager.emit<IUserCreatedEvent>('userCreated', {

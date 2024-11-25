@@ -33,8 +33,21 @@ export interface TEventOptions<Data> {
   removeEvent<E>(
     name: string,
     match: TDeepPartial<E>,
-    eventDomain?: string
+    eventDomain?: { name: string; type: 'domain' | 'service' }
   ): Promise<TVoidResult>;
+}
+
+export interface TGetNextEvent<E> {
+  addFailure(
+    event: IEvent<E>,
+    handler: IEventHandler<'external'>,
+    failure: IEventFailureHistory['failure']['data']
+  ): Promise<TVoidResult>;
+  finish(handler: IEventHandler<'external'>): Promise<TVoidResult>;
+  next(): Promise<
+    | TResult<{ event: IEvent<E>; handler: IEventHandler<'external'> }>
+    | TVoidResult
+  >;
 }
 
 /**
@@ -77,27 +90,41 @@ export class ApplicationEventManager {
   private static _registry:
     | {
         pending: {
-          [domain: string]: {
-            domain: string;
-            events: {
-              immediate: boolean;
+          [K in 'domains']: {
+            [domain: string]: {
+              events: {
+                immediate: boolean;
+                name: string;
+                type: 'internal' | 'external';
+              }[];
+
+              handler: null | (new (...args: any[]) => any);
+              listener: string;
+
               name: string;
+
+              rpc: { command: string; method: string }[];
+
+              type: 'domain' | 'service' | 'interface';
             }[];
-            handler: new (...args: any[]) => any;
-            rpc: { command: string; method: string }[];
-          }[];
+          };
         };
         ready: false;
       }
     | {
         events: {
-          [domain: string]: {
-            [event: string]: {
-              domain: string;
-              immediate: boolean;
-              listener: string;
-              method: (event: TEventOptions<any>) => Promise<TVoidResult>;
-            }[];
+          [K in 'domains']: {
+            [emitter: string]: {
+              [event: string]: {
+                immediate: boolean;
+                listener: string;
+                method:
+                  | null
+                  | ((event: TEventOptions<any>) => Promise<TVoidResult>);
+                name: string;
+                type: 'domain' | 'service' | 'interface';
+              }[];
+            };
           };
         };
         ready: true;
@@ -106,7 +133,12 @@ export class ApplicationEventManager {
             [command: string]: (data: any) => Promise<TResult<any>>;
           };
         };
-      } = { ready: false, pending: {} };
+      } = {
+    ready: false,
+    pending: {
+      domains: {}
+    }
+  };
 
   public constructor(
     @Container.injectContainer()
@@ -135,16 +167,25 @@ export class ApplicationEventManager {
     if (!ApplicationEventManager._registry.ready)
       throw new Error('Emitting event before manager is ready');
 
-    const { domain } = getApplicationCaller();
+    const listener = getApplicationCaller();
 
-    if (!(domain in ApplicationEventManager._registry.rpc))
-      return Result.fail(new NoHandlerForRPCCommandException(command, domain));
+    if (listener.type !== 'domain')
+      throw new Error(
+        `Only domains can perform RPC calls. Caller "${listener.name}" of type "${listener.type}" tried calling "${command}"`
+      );
 
-    if (!(command in ApplicationEventManager._registry.rpc[domain]))
-      return Result.fail(new NoHandlerForRPCCommandException(command, domain));
+    if (!(listener.name in ApplicationEventManager._registry.rpc))
+      return Result.fail(
+        new NoHandlerForRPCCommandException(command, listener.name)
+      );
+
+    if (!(command in ApplicationEventManager._registry.rpc[listener.name]))
+      return Result.fail(
+        new NoHandlerForRPCCommandException(command, listener.name)
+      );
 
     const result =
-      await ApplicationEventManager._registry.rpc[domain][command](data);
+      await ApplicationEventManager._registry.rpc[listener.name][command](data);
 
     if (result.failed()) return result;
 
@@ -157,12 +198,19 @@ export class ApplicationEventManager {
     if (!ApplicationEventManager._registry.ready)
       throw new Error('Emitting event before manager is ready');
 
-    const { domain } = getApplicationCaller();
+    const emitter = getApplicationCaller();
 
-    if (!(domain in ApplicationEventManager._registry.events))
+    if (emitter.type !== 'domain')
+      throw new Error(
+        `Only domains can emit events. Component ${emitter.name} of type ${emitter.type} tried emitting ${event}`
+      );
+
+    if (!(emitter.name in ApplicationEventManager._registry.events.domains))
       return Result.done();
 
-    if (!(event in ApplicationEventManager._registry.events[domain]))
+    if (
+      !(event in ApplicationEventManager._registry.events.domains[emitter.name])
+    )
       return Result.done();
 
     const generateIDResult =
@@ -172,13 +220,16 @@ export class ApplicationEventManager {
 
     let eventNeededToBeStored = false;
 
-    for (const listener of ApplicationEventManager._registry.events[domain][
-      event
-    ]) {
+    for (const listener of ApplicationEventManager._registry.events.domains[
+      emitter.name
+    ][event]) {
       if (listener.immediate) {
-        const eventResult = await listener.method({
+        const eventResult = await listener.method!({
           data,
-          removeEvent: ApplicationEventManager._createEventRemove(domain)
+          removeEvent: ApplicationEventManager._createEventRemove({
+            name: event,
+            type: emitter.type
+          })
         });
 
         if (eventResult.failed()) return eventResult;
@@ -197,14 +248,15 @@ export class ApplicationEventManager {
               createdAt: Date.now(),
               event: generateIDResult.value(),
               listener: {
-                domain: listener.domain,
-                type: 'domain',
+                name: listener.name,
+                type: listener.type,
                 listener: listener.listener
               },
               state: {
                 acquiredAt: null,
                 failures: 0,
-                lockedAt: null
+                lockedAt: null,
+                type: listener.method === null ? 'external' : 'local'
               }
             }
           );
@@ -219,9 +271,9 @@ export class ApplicationEventManager {
           data,
           emittedAt: Date.now(),
           emitter: {
-            domain,
+            name: emitter.name,
             event,
-            type: 'domain'
+            type: emitter.type
           },
           id: generateIDResult.value()
         });
@@ -255,9 +307,145 @@ export class ApplicationEventManager {
     };
   }
 
+  public static externalListener<I>(events: {
+    [domain: string]: string[];
+  }): ClassDecorator {
+    return (target) => {
+      console.log(target, events);
+      if (ApplicationEventManager._registry.ready)
+        throw new Error(
+          'Installing an external event listener when the event manager was already booted.'
+        );
+
+      const listener = getApplicationCaller();
+
+      for (const domain in events) {
+        if (Object.prototype.hasOwnProperty.call(events, domain)) {
+          const listenEvents = events[domain];
+          if (!(domain in ApplicationEventManager._registry.pending.domains))
+            ApplicationEventManager._registry.pending.domains[domain] = [];
+
+          ApplicationEventManager._registry.pending.domains[domain].push({
+            handler: null,
+            events: listenEvents.map((v) => ({
+              type: 'external',
+              name: v,
+              immediate: false
+            })),
+            listener: target.name,
+            rpc: [],
+            name: listener.name,
+            type: listener.type
+          });
+        }
+      }
+
+      const getNext: TGetNextEvent<I> = {
+        async next() {
+          while (true) {
+            const eventHandlerResult =
+              await ApplicationEventManager.instance._eventHandlerRepository.getNextEventHandler(
+                'external',
+                {
+                  listener: target.name,
+                  name: listener.name,
+                  type: listener.type
+                }
+              );
+
+            if (eventHandlerResult.failed()) return eventHandlerResult;
+
+            const eventHandler = eventHandlerResult.value();
+
+            if (eventHandler === null) return Result.done();
+
+            const eventResult =
+              await ApplicationEventManager.instance._eventRepository.getByID(
+                eventHandler.event
+              );
+
+            if (eventResult.failed()) return eventResult;
+
+            const event = eventResult.value();
+
+            console.debug({ event });
+
+            if (event === null) {
+              const deleteEventHandlerResult =
+                await ApplicationEventManager.instance._eventHandlerRepository.deleteByEvents(
+                  [eventHandler.event]
+                );
+
+              if (deleteEventHandlerResult.failed())
+                return deleteEventHandlerResult;
+            } else
+              return Result.ok({
+                event,
+                handler: eventHandler
+              });
+          }
+        },
+        async addFailure(event, handler, failure) {
+          const addEventFailureHistoryResult =
+            await ApplicationEventManager.instance._eventFailureHistoryRepository.saveFailure(
+              {
+                event,
+                failure: {
+                  data: failure,
+                  date: Date.now()
+                },
+                handler: handler.listener,
+                state: {
+                  attempts: handler.state.failures
+                }
+              }
+            );
+
+          if (addEventFailureHistoryResult.failed())
+            return addEventFailureHistoryResult;
+
+          const updateEventHandlerResult =
+            await ApplicationEventManager.instance._eventHandlerRepository.updateEventHandler(
+              handler.id,
+              {
+                state: {
+                  acquiredAt: null,
+                  failures: handler.state.failures + 1,
+                  lockedAt: Date.now()
+                }
+              }
+            );
+
+          if (updateEventHandlerResult.failed())
+            return updateEventHandlerResult;
+
+          return Result.done();
+        },
+        async finish(handler) {
+          const deleteEventHandlerResult =
+            await ApplicationEventManager.instance._eventHandlerRepository.deleteEventHandler(
+              handler.id
+            );
+
+          if (deleteEventHandlerResult.failed())
+            return deleteEventHandlerResult;
+
+          return Result.done();
+        }
+      };
+
+      Object.defineProperty(target.prototype, '_eventEmitter', {
+        writable: false,
+        configurable: false,
+        enumerable: false,
+        value: getNext
+      });
+    };
+  }
+
   public static listener(domain: string): ClassDecorator {
     return (target: any) => {
-      const { domain: listener } = getApplicationCaller();
+      const listener = getApplicationCaller();
 
       const events = ApplicationEventManager._pending.events.get(target) || [],
         rpc = ApplicationEventManager._pending.rpc.get(target) || [];
@@ -272,14 +460,16 @@ export class ApplicationEventManager {
           'Installing an event listener when the event manager was already booted.'
         );
 
-      if (!(domain in ApplicationEventManager._registry.pending))
-        ApplicationEventManager._registry.pending[domain] = [];
+      if (!(domain in ApplicationEventManager._registry.pending.domains))
+        ApplicationEventManager._registry.pending.domains[domain] = [];
 
-      ApplicationEventManager._registry.pending[domain].push({
+      ApplicationEventManager._registry.pending.domains[domain].push({
         handler: target,
-        events: events,
+        events: events.map((v) => ({ type: 'internal', ...v })),
         rpc: rpc,
-        domain: listener
+        listener: target.name,
+        name: listener.name,
+        type: listener.type
       });
 
       ApplicationEventManager._pending.events.delete(target);
@@ -305,24 +495,31 @@ export class ApplicationEventManager {
     };
   }
 
-  private static _createEventRemove(
-    defaultDomain: string
-  ): <E>(
+  private static _createEventRemove(defaultEmitter: {
+    name: string;
+    type: 'domain';
+  }): <E>(
     name: string,
     match: TDeepPartial<E>,
-    eventDomain?: string
+    eventDomain?: {
+      name: string;
+      type: 'domain';
+    }
   ) => Promise<TVoidResult> {
     return async function <E>(
       name: string,
       match: TDeepPartial<E>,
-      eventDomain: string = defaultDomain
+      emitter: {
+        name: string;
+        type: 'domain';
+      } = defaultEmitter
     ): Promise<TVoidResult> {
       const deleteEventResult =
         await ApplicationEventManager.instance._eventRepository.deleteEvent({
           emitter: {
-            domain: eventDomain,
+            name: emitter.name,
             event: name,
-            type: 'domain'
+            type: emitter.type
           },
           data: match
         });
@@ -339,7 +536,7 @@ export class ApplicationEventManager {
   })
   protected async handleNextEvent(): Promise<TVoidResult> {
     const eventHandlerResult =
-      await this._eventHandlerRepository.getNextEventHandler();
+      await this._eventHandlerRepository.getNextEventHandler('local');
 
     if (eventHandlerResult.failed()) return eventHandlerResult;
 
@@ -357,7 +554,7 @@ export class ApplicationEventManager {
 
     if (event === null) {
       const deleteEventHandlerResult =
-        await this._eventHandlerRepository.dl([eventHandler.event]);
+        await this._eventHandlerRepository.deleteByEvents([eventHandler.event]);
 
       if (deleteEventHandlerResult.failed()) return deleteEventHandlerResult;
 
@@ -423,66 +620,61 @@ export class ApplicationEventManager {
 
   @Container.builder()
   protected async prepare(): Promise<void> {
-    const newRegistry: {
+    const newRegistry: Extract<
+      (typeof ApplicationEventManager)['_registry'],
+      { ready: true }
+    > = {
+      ready: true,
       events: {
-        [domain: string]: {
-          [event: string]: {
-            domain: string;
-            immediate: boolean;
-            listener: string;
-            method: (event: TEventOptions<any>) => Promise<TVoidResult>;
-          }[];
-        };
-      };
-      ready: true;
-      rpc: {
-        [domain: string]: {
-          [command: string]: (data: any) => Promise<TResult<any>>;
-        };
-      };
-    } = { ready: true, events: {}, rpc: {} };
+        domains: {}
+      },
+      rpc: {}
+    };
 
     if (ApplicationEventManager._registry.ready)
       throw new Error('Building event manager when it was already booted.');
 
-    for (const domain in ApplicationEventManager._registry.pending) {
+    for (const name in ApplicationEventManager._registry.pending.domains) {
       if (
         Object.prototype.hasOwnProperty.call(
-          ApplicationEventManager._registry.pending,
-          domain
+          ApplicationEventManager._registry.pending.domains,
+          name
         )
       ) {
-        const registered = ApplicationEventManager._registry.pending[domain];
+        const registered =
+          ApplicationEventManager._registry.pending.domains[name];
 
-        if (!(domain in newRegistry.events)) newRegistry.events[domain] = {};
+        if (!(name in newRegistry.events.domains))
+          newRegistry.events.domains[name] = {};
 
         for (const element of registered) {
-          const built = await this._container.build(element.handler);
+          const built =
+            element.handler === null
+              ? null
+              : await this._container.build(element.handler);
 
           for (const event of element.events) {
-            if (
-              !(event.name in ApplicationEventManager._registry.pending[domain])
-            )
-              newRegistry.events[domain][event.name] = [];
+            if (!(event.name in newRegistry.events.domains[name]))
+              newRegistry.events.domains[name][event.name] = [];
 
-            newRegistry.events[domain][event.name].push({
-              domain: element.domain,
-              method: built[event.name].bind(built),
-              immediate: event.immediate as true,
-              listener: element.handler.name
+            newRegistry.events.domains[name][event.name].push({
+              name: element.name,
+              method: null === built ? null : built[event.name].bind(built),
+              immediate: event.immediate,
+              listener: element.listener,
+              type: element.type
             });
           }
 
           for (const rpc of element.rpc) {
-            if (!(domain in newRegistry.rpc)) newRegistry.rpc[domain] = {};
+            if (!(name in newRegistry.rpc)) newRegistry.rpc[name] = {};
 
-            if (rpc.command in newRegistry.rpc[domain])
+            if (rpc.command in newRegistry.rpc[name])
               throw new Error(
-                `RPC command "${rpc}" for domain "${domain}" is already handled.`
+                `RPC command "${rpc}" for domain "${name}" is already handled.`
               );
 
-            newRegistry.rpc[domain][rpc.command] =
-              built[rpc.method].bind(built);
+            newRegistry.rpc[name][rpc.command] = built[rpc.method].bind(built);
           }
         }
       }
@@ -542,28 +734,29 @@ export class ApplicationEventManager {
     if (!ApplicationEventManager._registry.ready)
       throw new Error('Handling event before manager is ready');
 
-    const handler = ApplicationEventManager._registry.events[
-      event.emitter.domain
+    const handler = ApplicationEventManager._registry.events.domains[
+      event.emitter.name
     ][event.emitter.event].find(
       (v) =>
-        v.domain === eventHandler.listener.domain &&
+        v.name === eventHandler.listener.name &&
         v.listener === eventHandler.listener.listener
     );
 
     if (!handler)
       return Result.fail(
         new NoHandlerFoundException({
-          type: 'domain',
+          type: eventHandler.listener.type,
           listener: eventHandler.listener.listener,
           method: event.emitter.event
         })
       );
 
-    const handlerResult = await handler.method({
+    const handlerResult = await handler.method!({
       data: event.data,
-      removeEvent: ApplicationEventManager._createEventRemove(
-        event.emitter.domain
-      )
+      removeEvent: ApplicationEventManager._createEventRemove({
+        name: event.emitter.name,
+        type: event.emitter.type
+      })
     });
 
     if (handlerResult.failed()) return handlerResult;

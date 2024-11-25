@@ -6,8 +6,8 @@ export interface IEvent<D> {
   emittedAt: number;
 
   emitter: {
-    domain: string;
     event: string;
+    name: string;
     type: 'domain';
   };
 

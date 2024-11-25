@@ -36,7 +36,9 @@ const [tsConfig] = tslint.config({
     '@typescript-eslint/no-unused-vars': [
       'error',
       {
-        varsIgnorePattern: '^_'
+        varsIgnorePattern: '^_',
+        argsIgnorePattern: '^_',
+        args: 'all'
       }
     ],
     '@typescript-eslint/consistent-type-assertions': [
@@ -98,7 +100,7 @@ export default tslint.config(
         tsconfigRootDir: path.dirname(tsConfigs.root)
       }
     },
-    files: ['src/**/*.ts']
+    files: ['src/**/*.ts', 'typings/**/*.ts']
   },
   {
     ...prettierConfig,

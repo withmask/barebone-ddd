@@ -1,6 +1,7 @@
 import 'loadDomains';
+
 import { container, mongoDriverTokens, userTokens } from 'components';
-import { PeriodicWorker } from 'interfaces';
+import { PeriodicWorker, UserRequestsController } from 'interfaces';
 
 import type { IInterface } from 'shared';
 import type { MongoDriver } from 'drivers/mongo';
@@ -17,26 +18,36 @@ switch (process.env.INTERFACE) {
 
   case 'core':
     {
-      const driver = await container.get<MongoDriver>(mongoDriverTokens.driver);
+      const b = await container.get<MongoDriver>(mongoDriverTokens.driver);
 
-      const startDriver = await driver.startDriver();
+      const z = await b.startDriver();
 
-      startDriver.lazy();
+      z.lazy();
 
-      const userController = await container.get<CreateUserController>(
+      const user = await container.get<CreateUserController>(
         userTokens.controllers.createUserController
       );
 
-      const result = await userController.execute({
+      const rl = await user.execute({
         email: 'with.mask@tutanota.com',
-        name: 'Hello world',
-        password: 'Cool password'
+        name: 'With Mask',
+        password: 'password'
       });
 
-      console.log(result.lazy());
+      rl.lazy();
+
+      const x = await container.build(UserRequestsController);
+
+      let count = 10;
+      while (count--) {
+        const y = await x.getNextEvent();
+
+        console.log('broke', count, y.lazy());
+      }
+
       process.exit(1);
     }
-    //@ts-expect-error Because ts is dumb
+    // @ts-expect-error Temporary until we release a final version.
     break;
 
   default:

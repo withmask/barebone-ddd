@@ -26,7 +26,7 @@ export interface IConfig {
             [component: string]: {
               collections: { [key: string]: string };
               database: string;
-            };
+            }[];
           };
           uri: string;
         };

@@ -1,9 +1,8 @@
 /* eslint-disable max-classes-per-file */
-import type { Module, PrivateClass } from 'components';
 import type { TypedMethodDecorator } from 'shared';
+import type { Module, PrivateClass } from 'components';
 
 interface ContainerPluginMetadata {
-  data: any;
   method: (...args: any[]) => any;
 }
 
@@ -46,14 +45,17 @@ export class Container {
   private _listener: ContainerListener | null;
   private readonly _plugins: {
     methods: {
-      [component: string]: (
-        metadata: any,
-        method: (...args: any[]) => any
-      ) => any;
+      [component: string]: (options: {
+        [key: string]: any;
+        method: (...args: any[]) => any;
+      }) => any;
     };
     queue: {
       methods: {
-        [component: string]: [any, method: (...args: any[]) => any][];
+        [component: string]: {
+          [key: string]: any;
+          method: (...args: any[]) => any;
+        }[];
       };
     };
   };
@@ -176,7 +178,7 @@ export class Container {
 
   public static interceptor<
     M extends ContainerPluginMetadata
-  >(): TypedMethodDecorator<(meta: M['data'], method: M['method']) => void> {
+  >(): TypedMethodDecorator<(options: M) => void> {
     return (target: any, prop: string | symbol) => {
       const specialFunctions =
         Container._specialFunctions.get(target.constructor) || new Map();
@@ -192,7 +194,9 @@ export class Container {
 
   public static plugin<M extends ContainerPluginMetadata>(
     token: string,
-    data: M['data']
+    ...[data]: [Omit<M, 'method'>] extends [never]
+      ? []
+      : [data: Omit<M, 'method'>]
   ): TypedMethodDecorator<M['method']> {
     return (target: any, prop) => {
       const pluginMetadata = this._pluginMetadata.get(target.constructor) || {};
@@ -303,7 +307,7 @@ export class Container {
 
       if (id in this._plugins.queue.methods) {
         for (const pending of this._plugins.queue.methods[id]) {
-          this._plugins.methods[id](...pending);
+          this._plugins.methods[id](pending);
         }
         delete this._plugins.queue.methods[id];
       }
@@ -321,15 +325,15 @@ export class Container {
           const metadata = propertiesWithMetadata[prop];
 
           if (plugin in this._plugins.methods)
-            this._plugins.methods[plugin](metadata, built[prop].bind(built));
+            this._plugins.methods[plugin]({ method: built[prop].bind(built) });
           else {
             if (!(plugin in this._plugins.queue.methods))
               this._plugins.queue.methods[plugin] = [];
 
-            this._plugins.queue.methods[plugin].push([
-              metadata,
-              built[prop].bind(built)
-            ]);
+            this._plugins.queue.methods[plugin].push({
+              ...metadata,
+              method: built[prop].bind(built)
+            });
           }
         }
       }
